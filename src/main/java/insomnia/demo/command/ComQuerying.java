@@ -9,12 +9,14 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.Configuration;
 
+import insomnia.data.ITree;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.MEASURES;
 import insomnia.demo.data.DataAccesses;
 import insomnia.demo.data.IDataAccess.UFunctionTransform;
 import insomnia.demo.input.InputData;
 import insomnia.implem.kv.data.KVLabel;
+import insomnia.implem.kv.data.KVLabels;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 
 final class ComQuerying implements ICommand
@@ -94,7 +96,7 @@ final class ComQuerying implements ICommand
 					resultStream.forEach(r -> {
 						qstream.stopChrono();
 						count[0]++;
-						out.println(r);
+						out.println(ITree.followLabel(r, r.getRoot(), KVLabels.create("$recordId")).get(0).getValue());
 						qstream.startChrono();
 					});
 				else
