@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import org.apache.commons.collections4.IteratorUtils;
+import org.apache.commons.configuration2.Configuration;
 import org.bson.BsonDouble;
 import org.bson.BsonString;
 import org.bson.BsonType;
@@ -37,18 +38,23 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private MongoCollection<Document> collection;
 
-	private DataAccess(URI uri)
+	private int batchSize;
+
+	private DataAccess(URI uri, Configuration config)
 	{
 		connection = new ConnectionString(uri.toString());
 		client     = MongoClients.create(connection);
 		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
+
+		batchSize = config.getInt("mongodb.batchSize", 100);
+//		System.out.printf("bsize: %d\n", batchSize);
 	}
 
 	// ==========================================================================
 
-	public static IDataAccess<Object, KVLabel> open(URI uri)
+	public static IDataAccess<Object, KVLabel> open(URI uri, Configuration config)
 	{
-		return new DataAccess(uri);
+		return new DataAccess(uri, config);
 	}
 
 	private static ITree<Object, KVLabel> doc2Tree(Document doc)
@@ -206,8 +212,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	@Override
 	public Stream<ITree<Object, KVLabel>> execute(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap)
 	{
-		int batchSize = 100;
-
 		var batch = HelpStream.batch(queries, batchSize);
 
 		return batch.flatMap(q -> execute(q, userWrap));

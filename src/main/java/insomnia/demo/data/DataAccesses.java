@@ -3,7 +3,7 @@ package insomnia.demo.data;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 import org.apache.commons.configuration2.Configuration;
 
@@ -23,7 +23,7 @@ public final class DataAccesses
 	{
 		THE_FACTORY;
 
-		Map<String, Function<URI, IDataAccess<Object, KVLabel>>> i = Map.of( //
+		Map<String, BiFunction<URI, Configuration, IDataAccess<Object, KVLabel>>> i = Map.of( //
 			"mongodb", DataAccess::open //
 		);
 	}
@@ -31,7 +31,7 @@ public final class DataAccesses
 	public static IDataAccess<Object, KVLabel> getDataAccess(Configuration config) throws URISyntaxException
 	{
 		var dataUri = new URI(config.getString("data"));
-		return DataAccessFactory.THE_FACTORY.i.get(dataUri.getScheme()).apply(dataUri);
+		return DataAccessFactory.THE_FACTORY.i.get(dataUri.getScheme()).apply(dataUri, config);
 	}
 
 }
