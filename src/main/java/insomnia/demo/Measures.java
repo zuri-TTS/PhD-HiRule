@@ -29,4 +29,9 @@ public final class Measures
 	{
 		return measures.get(index);
 	}
+
+	public CPUTimeBenchmark set(int index, CPUTimeBenchmark time)
+	{
+		return measures.set(index, time);
+	}
 }

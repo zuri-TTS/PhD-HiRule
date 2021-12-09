@@ -105,10 +105,7 @@ final class ComQuerying implements ICommand
 					});
 				CPUTimeBenchmark.stopChrono(qmes, qstream);
 			}
-
-			var qprocess = TheDemo.measure(MEASURES.QPROCESS);
-			qprocess.copy(qmes);
-			qprocess.minus(qstream);
+			TheDemo.measure(MEASURES.QPROCESS, CPUTimeBenchmark.minus(qmes, qstream));
 
 			if (config.getBoolean(MyOptions.DisplayNb.opt.getLongOpt(), false))
 				out.printf("nb: %s\n", count[0]);

@@ -79,6 +79,11 @@ public final class TheDemo
 		return measures.get(measure.ordinal());
 	}
 
+	public static CPUTimeBenchmark measure(MEASURES measure, CPUTimeBenchmark set)
+	{
+		return measures.set(measure.ordinal(), set);
+	}
+
 	public static Measures measures()
 	{
 		return measures;
