@@ -34,7 +34,6 @@ final class ComGenerate implements ICommand
 	{
 		Output(Option.builder().longOpt("generate.output").desc("Output URIs for display").build()) //
 		, DisplayRefs(Option.builder().longOpt("generate.display.refs").desc("Display the reformulations").build()) //
-		, DisplayNb(Option.builder().longOpt("generate.display.nb").desc("Display the number of reformulations").build()) //
 		;
 
 		Option opt;
@@ -135,9 +134,7 @@ final class ComGenerate implements ICommand
 			var displayRefs = config.getBoolean(MyOptions.DisplayRefs.opt.getLongOpt(), false);
 			q.forEach(generateAction(nb, displayRefs));
 		}
-
-		if (config.getBoolean(MyOptions.DisplayNb.opt.getLongOpt(), false))
-			out.printf("Generated: %d\n", nb[0]);
+		TheDemo.getMeasures().set("reformulations", "nb", nb[0]);
 	}
 
 }

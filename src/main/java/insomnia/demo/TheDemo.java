@@ -34,26 +34,15 @@ public final class TheDemo
 		NB
 	}
 
-	private static Measures measures;
+	private static Measures measures = new Measures();
 
 	static
 	{
 		setup();
 	}
 
-	private static void printMeasures(PrintStream out)
-	{
-		for (int i = 0; i < MEASURES.NB.ordinal(); i++)
-		{
-			var m = MEASURES.values()[i];
-			out().printf("%s: %s\n", m.name(), measures.get(m.ordinal()));
-		}
-	}
-
 	private static void setup()
 	{
-		measures = Measures.nbMeasures(MEASURES.NB.ordinal());
-
 		URL.setURLStreamHandlerFactory(URLStreamHandlerFactories.of(Map.<String, URLStreamHandler>of( //
 			"ressource", URLStreamHandlers.from(HelpFunctions.unchecked(u -> {
 				var path = u.getPath().substring(1); // Avoid the '/' first char
@@ -74,14 +63,20 @@ public final class TheDemo
 			})))));
 	}
 
+	public static Measures getMeasures()
+	{
+		return measures;
+	}
+
 	public static CPUTimeBenchmark measure(MEASURES measure)
 	{
-		return measures.get(measure.ordinal());
+		return measures.getTime("measures", measure.name());
 	}
 
 	public static CPUTimeBenchmark measure(MEASURES measure, CPUTimeBenchmark set)
 	{
-		return measures.set(measure.ordinal(), set);
+		measures.set("measures", measure.name(), set);
+		return set;
 	}
 
 	public static Measures measures()
@@ -147,8 +142,7 @@ public final class TheDemo
 			theCommand.execute(config);
 			mes.stopChrono();
 
-			out().println("[measures]");
-			printMeasures(out());
+			measures.print(out());
 		}
 		catch (Throwable e)
 		{

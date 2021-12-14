@@ -8,6 +8,7 @@ import java.util.stream.Stream;
 
 import org.apache.commons.collections4.IteratorUtils;
 import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.lang3.tuple.Pair;
 import org.bson.BsonDouble;
 import org.bson.BsonString;
 import org.bson.BsonType;
@@ -16,6 +17,7 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 
 import com.mongodb.ConnectionString;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
@@ -195,11 +197,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			.map(DataAccess::doc2Tree);
 	}
 
-	private Stream<ITree<Object, KVLabel>> execute(List<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap)
+	private Stream<ITree<Object, KVLabel>> wrapDocumentCursor(FindIterable<Document> cursor, UFunctionTransform<Object, KVLabel> userWrap)
 	{
-		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), DataAccess::tree2Query));
-		var cursor      = collection.find(disjunction).showRecordId(true);
-
 		if (userWrap == null)
 			return HelpStream.toStream(cursor).map(DataAccess::doc2Tree);
 		else
@@ -207,6 +206,23 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			var transform = userWrap.transform(o -> doc2Tree((Document) o));
 			return HelpStream.toStream(cursor).map(m -> transform.apply(m));
 		}
+	}
+
+	@Override
+	public Stream<Pair<ITree<Object, KVLabel>, Stream<ITree<Object, KVLabel>>>> executeEach(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap)
+	{
+		return queries.map(q -> {
+			var bsonq  = tree2Query(q);
+			var cursor = collection.find(bsonq).showRecordId(true);
+			return Pair.of(q, wrapDocumentCursor(cursor, userWrap));
+		});
+	}
+
+	private Stream<ITree<Object, KVLabel>> execute(List<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap)
+	{
+		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), DataAccess::tree2Query));
+		var cursor      = collection.find(disjunction).showRecordId(true);
+		return wrapDocumentCursor(cursor, userWrap);
 	}
 
 	@Override

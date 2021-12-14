@@ -1,37 +1,71 @@
 package insomnia.demo;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 import insomnia.lib.cpu.CPUTimeBenchmark;
 
 public final class Measures
 {
-	private List<CPUTimeBenchmark> measures;
+	private Map<String, Map<String, Object>> groups = new HashMap<>();
 
-	private Measures()
+	// ==========================================================================
+
+	public CPUTimeBenchmark getTime(String group, String measure)
 	{
-
+		return (CPUTimeBenchmark) groups.computeIfAbsent(group, s -> new HashMap<>()).computeIfAbsent(measure, k -> new CPUTimeBenchmark());
 	}
 
-	public static Measures nbMeasures(int nb)
+	public int getInt(String group, String measure)
 	{
-		var ret = new Measures();
-		ret.measures = new ArrayList<>(nb);
-
-		while (nb-- > 0)
-			ret.measures.add(new CPUTimeBenchmark());
-
-		return ret;
+		return (Integer) groups.computeIfAbsent(group, s -> new HashMap<>()).computeIfAbsent(measure, k -> 0);
 	}
 
-	public CPUTimeBenchmark get(int index)
+	public int[] getIntTab(String group, String measure)
 	{
-		return measures.get(index);
+		return (int[]) groups.computeIfAbsent(group, s -> new HashMap<>()).computeIfAbsent(measure, k -> new int[] { 0 });
+	}
+	// ==========================================================================
+
+	private void set_(String group, String measure, Object val)
+	{
+		groups.computeIfAbsent(group, s -> new HashMap<>()).put(measure, val);
 	}
 
-	public CPUTimeBenchmark set(int index, CPUTimeBenchmark time)
+	public void set(String group, String measure, CPUTimeBenchmark val)
 	{
-		return measures.set(index, time);
+		set_(group, measure, val);
+	}
+
+	public void set(String group, String measure, int val)
+	{
+		set_(group, measure, val);
+	}
+
+	public void set(String group, String measure, int val[])
+	{
+		set_(group, measure, val);
+	}
+
+	// ==========================================================================
+
+	public void print(PrintStream print)
+	{
+		var sortedGroups = new ArrayList<>(groups.entrySet());
+		Collections.sort(sortedGroups, Map.Entry.<String, Map<String, Object>>comparingByKey());
+
+		for (var group : sortedGroups)
+		{
+			print.printf("\n[%s]\n", group.getKey());
+
+			var sortedMeasures = new ArrayList<>(group.getValue().entrySet());
+			Collections.sort(sortedMeasures, Map.Entry.<String, Object>comparingByKey());
+
+			for (var measure : sortedMeasures)
+				print.printf("%s: %s\n", measure.getKey(), measure.getValue());
+		}
 	}
 }

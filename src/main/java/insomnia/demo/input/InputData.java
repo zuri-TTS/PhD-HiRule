@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.EnumSet;
@@ -80,9 +81,9 @@ public final class InputData
 		return Optional.of(Stream.of(thePath));
 	}
 
-	public static InputStream tryOpenPath(Path path) throws IOException
+	public static InputStream tryOpenPath(Path path, OpenOption... options) throws IOException
 	{
-		return Files.newInputStream(path);
+		return Files.newInputStream(path, options);
 	}
 
 	public static InputStream tryOpenStream(String uri) throws IOException
@@ -95,9 +96,21 @@ public final class InputData
 		return opt.get().toURL().openStream();
 	}
 
-	public static OutputStream tryOpenOutputPath(Path path) throws IOException
+	public static OutputStream fakeOpenOutputPath(Path path, OpenOption... options)
 	{
-		return Files.newOutputStream(path);
+		try
+		{
+			return Files.newOutputStream(path, options);
+		}
+		catch (IOException e)
+		{
+			return OutputStream.nullOutputStream();
+		}
+	}
+
+	public static OutputStream tryOpenOutputPath(Path path, OpenOption... options) throws IOException
+	{
+		return Files.newOutputStream(path, options);
 	}
 
 	public static OutputStream tryOpenOutputStream(String uri) throws IOException
