@@ -14,7 +14,6 @@ import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
 import insomnia.demo.TheDemo;
-import insomnia.demo.TheDemo.MEASURES;
 import insomnia.demo.input.InputData;
 import insomnia.demo.input.Query;
 import insomnia.demo.input.Rules;
@@ -33,7 +32,7 @@ final class ComGenerate implements ICommand
 	private enum MyOptions
 	{
 		Output(Option.builder().longOpt("generate.output").desc("Output URIs for display").build()) //
-		, DisplayRefs(Option.builder().longOpt("generate.display.refs").desc("Display the reformulations").build()) //
+		, DisplayRefs(Option.builder().longOpt("generate.display.refs").desc("(bool) Display the reformulations").build()) //
 		;
 
 		Option opt;
@@ -71,7 +70,7 @@ final class ComGenerate implements ICommand
 
 	private static IBUFTAChunkModifier<Object, KVLabel> rewriteMod(Collection<? extends IRule<Object, KVLabel>> rules)
 	{
-		var mes = TheDemo.measure(MEASURES.REWRITING);
+		var mes = TheDemo.measure("query.rewriting");
 		return c -> {
 			mes.startChrono();
 			BUFTATerminalRuleApplier.getMod(rules).accept(c);
@@ -134,7 +133,7 @@ final class ComGenerate implements ICommand
 			var displayRefs = config.getBoolean(MyOptions.DisplayRefs.opt.getLongOpt(), false);
 			q.forEach(generateAction(nb, displayRefs));
 		}
-		TheDemo.getMeasures().set("reformulations", "nb", nb[0]);
+		TheDemo.measure("reformulations", "nb", nb[0]);
 	}
 
 }

@@ -1,6 +1,5 @@
 package insomnia.demo.command;
 
-import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
@@ -18,7 +17,6 @@ import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
 import insomnia.demo.TheDemo;
-import insomnia.demo.TheDemo.MEASURES;
 import insomnia.demo.data.DataAccesses;
 import insomnia.demo.data.IDataAccess.UFunctionTransform;
 import insomnia.demo.input.InputData;
@@ -84,7 +82,7 @@ final class ComQuerying implements ICommand
 
 	private UFunctionTransform<Object, KVLabel> userWrap()
 	{
-		var qtrans = TheDemo.measure(MEASURES.QTRANSFORM);
+		var qtrans = TheDemo.measure("query.tree2native");
 
 		return f -> o -> {
 			qtrans.startChrono();
@@ -130,12 +128,11 @@ final class ComQuerying implements ICommand
 			qout.close();
 			qnempty.close();
 		}
-		var measures = TheDemo.getMeasures();
-		measures.set("reformulations", "empty", emptyQueries.size());
-		measures.set("reformulations", "non-empty", nbQueries[0] - emptyQueries.size());
-		measures.set("reformulations", "total", nbQueries[0]);
-		measures.set("answers", "total", allRecords.size());
-		measures.set("answers", "unique", allRecords.uniqueSet().size());
+		TheDemo.measure("each.reformulations", "empty", emptyQueries.size());
+		TheDemo.measure("each.reformulations", "non-empty", nbQueries[0] - emptyQueries.size());
+		TheDemo.measure("each.reformulations", "total", nbQueries[0]);
+		TheDemo.measure("each.answers", "total", allRecords.size());
+		TheDemo.measure("each.answers", "unique", allRecords.uniqueSet().size());
 
 		var printer = outputFilePrinter("empty");
 		emptyQueries.forEach(printer::println);
@@ -164,46 +161,46 @@ final class ComQuerying implements ICommand
 	{
 		try
 		{
+			var createStreamMeas = TheDemo.measure("query.eval.stream.create");
+
 			var dataAccess   = DataAccesses.getDataAccess(config);
 			var resultStream = dataAccess.execute(ComGenerate.queries(config), userWrap());
 
 			int count[] = new int[1];
-			var ans_out = new PrintStream(outputFilePrinter("answers"));
 
-			var qmes    = TheDemo.measure(MEASURES.QUERYING);
-			var qstream = TheDemo.measure(MEASURES.QSTREAM);
+			var qeval   = TheDemo.measure("query.eval.total");
+			var qstream = TheDemo.measure("query.eval.stream");
 
 			{
 				var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
-				CPUTimeBenchmark.startChrono(qmes, qstream);
+				var ans_out        = new PrintStream( //
+					displayAnswers ? outputFilePrinter("answers") : PrintStream.nullOutputStream() //
+				);
 
-				if (displayAnswers)
+				Consumer<ITree<Object, KVLabel>> displayProcess = displayAnswers //
+					? r -> ans_out.println(recordId(r)) //
+					: r -> {
+					};
+
+				CPUTimeBenchmark.startChrono(qeval, qstream);
+				{
 					resultStream.forEach(r -> {
 						qstream.stopChrono();
 						count[0]++;
-						ans_out.println(recordId(r));
+						displayProcess.accept(r);
 						qstream.startChrono();
 					});
-				else
-					resultStream.forEach(r -> {
-						qstream.stopChrono();
-						count[0]++;
-						qstream.startChrono();
-					});
-				CPUTimeBenchmark.stopChrono(qmes, qstream);
+				}
+				CPUTimeBenchmark.stopChrono(qeval, qstream);
 				ans_out.close();
 			}
-			TheDemo.measure(MEASURES.QPROCESS, CPUTimeBenchmark.minus(qmes, qstream));
-			TheDemo.getMeasures().set("answers", "total", count[0]);
+			TheDemo.measure("query.eval.stream.action", CPUTimeBenchmark.minus(qeval, qstream));
+			TheDemo.measure("answers", "total", count[0]);
+			qeval.plus(createStreamMeas);
 		}
 		catch (URISyntaxException e)
 		{
 			throw new IllegalArgumentException(e);
 		}
-		catch (IOException e)
-		{
-			throw new RuntimeException(e);
-		}
 	}
-
 }

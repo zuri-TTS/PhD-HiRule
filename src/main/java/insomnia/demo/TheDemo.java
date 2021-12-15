@@ -18,6 +18,7 @@ import insomnia.demo.command.ICommand;
 import insomnia.demo.command.TheCommands;
 import insomnia.demo.help.URLStreamHandlerFactories;
 import insomnia.demo.help.URLStreamHandlers;
+import insomnia.demo.input.InputData;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpFunctions;
 import insomnia.lib.net.StdUrlStreamHandler;
@@ -25,14 +26,6 @@ import insomnia.lib.net.StdUrlStreamHandler;
 public final class TheDemo
 {
 	private static final String cmdLine = "tfdemo";
-
-	public enum MEASURES
-	{
-		COMMAND, //
-		REWRITING, //
-		QUERYING, QSTREAM, QTRANSFORM, QPROCESS, //
-		NB
-	}
 
 	private static Measures measures = new Measures();
 
@@ -68,14 +61,25 @@ public final class TheDemo
 		return measures;
 	}
 
-	public static CPUTimeBenchmark measure(MEASURES measure)
+	public static CPUTimeBenchmark measure(String name)
 	{
-		return measures.getTime("measures", measure.name());
+		return measures.getTime("measures", name);
 	}
 
-	public static CPUTimeBenchmark measure(MEASURES measure, CPUTimeBenchmark set)
+	public static CPUTimeBenchmark measure(String group, String name, CPUTimeBenchmark set)
 	{
-		measures.set("measures", measure.name(), set);
+		measures.set(group, name, set);
+		return set;
+	}
+
+	public static void measure(String group, String name, int set)
+	{
+		measures.set(group, name, set);
+	}
+
+	public static CPUTimeBenchmark measure(String name, CPUTimeBenchmark set)
+	{
+		measures.set("measures", name, set);
 		return set;
 	}
 
@@ -135,14 +139,16 @@ public final class TheDemo
 					config = TheConfiguration.union(configs);
 				}
 			}
-			var mes = measure(MEASURES.COMMAND);
+			var mes = measure("command");
 
 			config.addProperty("#cli", cli);
 			mes.startChrono();
 			theCommand.execute(config);
 			mes.stopChrono();
 
-			measures.print(out());
+			var outMeasures = new PrintStream(InputData.getOutput(List.of(config.getString("output.measures", "std://out").split(","))), true);
+
+			measures.print(outMeasures);
 		}
 		catch (Throwable e)
 		{
