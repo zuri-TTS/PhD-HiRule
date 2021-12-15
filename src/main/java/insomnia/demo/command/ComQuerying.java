@@ -7,7 +7,9 @@ import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
@@ -92,18 +94,19 @@ final class ComQuerying implements ICommand
 		};
 	}
 
-	private int recordId(ITree<Object, KVLabel> record)
+	private String recordId(ITree<Object, KVLabel> record)
 	{
-		var val = (Number) ITree.followLabel(record, record.getRoot(), KVLabels.create("$recordId")).get(0).getValue();
-		return val.intValue();
+		var val = (String) ITree.followLabel(record, record.getRoot(), KVLabels.create("_id")).get(0).getValue();
+		return val;
 	}
 
-	public void executeEach(Configuration config) throws Exception
+	private void executeEach(Configuration config) throws Exception
 	{
-		var                          dataAccess   = DataAccesses.getDataAccess(config);
-		var                          resultStream = dataAccess.executeEach(ComGenerate.queries(config), userWrap());
+		var dataAccess   = DataAccesses.getDataAccess(config);
+		var resultStream = dataAccess.executeEach(ComGenerate.queries(config), userWrap(), TheDemo.measure("each.query.eval.stream.create"));
+
 		List<ITree<Object, KVLabel>> emptyQueries = new ArrayList<>();
-		Bag<Integer>                 allRecords   = new HashBag<>();
+		Bag<String>                  allRecords   = new HashBag<>();
 
 		int nbQueries[] = new int[1];
 		{
@@ -157,14 +160,19 @@ final class ComQuerying implements ICommand
 			executeBatch(config);
 	}
 
-	public void executeBatch(Configuration config) throws Exception
+	private void executeBatch(Configuration config) throws Exception
+	{
+		executeBatch(config, ComGenerate.queries(config));
+	}
+
+	private void executeBatch(Configuration config, Stream<ITree<Object, KVLabel>> queries) throws Exception
 	{
 		try
 		{
 			var createStreamMeas = TheDemo.measure("query.eval.stream.create");
 
 			var dataAccess   = DataAccesses.getDataAccess(config);
-			var resultStream = dataAccess.execute(ComGenerate.queries(config), userWrap());
+			var resultStream = dataAccess.execute(queries, userWrap(), createStreamMeas);
 
 			int count[] = new int[1];
 

@@ -31,6 +31,7 @@ import insomnia.implem.data.creational.TreeBuilder;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.kv.data.KVValues;
+import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpStream;
 
 public final class DataAccess implements IDataAccess<Object, KVLabel>
@@ -106,7 +107,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		else if (doc.isNull())
 			sb.goUp();
 		else if (doc.isObjectId())
-			sb.removeUp();
+		{
+			sb.setValue(doc.asObjectId().getValue().toString());
+			sb.goUp();
+		}
 		else
 			throw new IllegalArgumentException(String.format("Cannot handle %s value", doc));
 	}
@@ -209,28 +213,32 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public Stream<Pair<ITree<Object, KVLabel>, Stream<ITree<Object, KVLabel>>>> executeEach(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap)
+	public Stream<Pair<ITree<Object, KVLabel>, Stream<ITree<Object, KVLabel>>>> executeEach(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap, CPUTimeBenchmark firstEval)
 	{
 		return queries.map(q -> {
-			var bsonq  = tree2Query(q);
-			var cursor = collection.find(bsonq).showRecordId(true);
+			var bsonq = tree2Query(q);
+			firstEval.startChrono();
+			var cursor = collection.find(bsonq);
+			firstEval.stopChrono();
 			return Pair.of(q, wrapDocumentCursor(cursor, userWrap));
 		});
 	}
 
-	private Stream<ITree<Object, KVLabel>> execute(List<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap)
+	private Stream<ITree<Object, KVLabel>> execute(List<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap, CPUTimeBenchmark firstEval)
 	{
 		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), DataAccess::tree2Query));
-		var cursor      = collection.find(disjunction).showRecordId(true);
+		firstEval.startChrono();
+		var cursor = collection.find(disjunction);
+		firstEval.stopChrono();
 		return wrapDocumentCursor(cursor, userWrap);
 	}
 
 	@Override
-	public Stream<ITree<Object, KVLabel>> execute(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap)
+	public Stream<ITree<Object, KVLabel>> execute(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap, CPUTimeBenchmark firstEval)
 	{
 		var batch = HelpStream.batch(queries, batchSize);
 
-		return batch.flatMap(q -> execute(q, userWrap));
+		return batch.flatMap(q -> execute(q, userWrap, firstEval));
 	}
 
 	@Override
