@@ -5,6 +5,13 @@
 	<groupId>insomnia</groupId>
 	<artifactId>treeforce-demo</artifactId>
 	<version>0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
+
+	<properties>
+		<maven.compiler.source>11</maven.compiler.source>
+		<maven.compiler.target>11</maven.compiler.target>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>insomnia</groupId>
@@ -47,43 +54,38 @@
 			<version>1.7.32</version>
 		</dependency>
 	</dependencies>
+
 	<build>
-		<sourceDirectory>src</sourceDirectory>
 		<plugins>
-			<plugin>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.8.1</version>
-				<configuration>
-					<source>11</source>
-					<target>11</target>
-				</configuration>
-			</plugin>
-
 
 			<plugin>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<version>3.1.0</version>
-				<configuration>
-					<archive>
-						<manifest>
-							<mainClass>insomnia.demo.TheDemo</mainClass>
-						</manifest>
-					</archive>
-					<descriptorRefs>
-						<descriptorRef>jar-with-dependencies</descriptorRef>
-					</descriptorRefs>
-				</configuration>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>3.2.0</version>
 				<executions>
 					<execution>
-						<id>make-assembly</id>
+						<id>copy-dependencies</id>
 						<phase>package</phase>
 						<goals>
-							<goal>single</goal>
+							<goal>copy-dependencies</goal>
 						</goals>
 					</execution>
 				</executions>
 			</plugin>
 
+
+			<plugin>
+				<artifactId>maven-jar-plugin</artifactId>
+				<configuration>
+					<archive>
+						<manifest>
+							<addClasspath>true</addClasspath>
+							<useUniqueVersions>false</useUniqueVersions>
+							<mainClass>insomnia.demo.TheDemo</mainClass>
+							<classpathPrefix>dependency/</classpathPrefix>
+						</manifest>
+					</archive>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 </project>
