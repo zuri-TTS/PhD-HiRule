@@ -148,6 +148,8 @@ final class ComQuerying implements ICommand
 		printer = outputFilePrinter("answers-unique");
 		allRecords.uniqueSet().forEach(printer::println);
 		printer.close();
+
+		executeBatch(config, emptyQueries.stream());
 	}
 
 	public void execute(Configuration config) throws Exception
