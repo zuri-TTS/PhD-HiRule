@@ -1,5 +1,7 @@
 package insomnia.demo.command;
 
+import java.io.PrintStream;
+
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.demo.TheDemo;
@@ -19,12 +21,19 @@ final class ComConfig implements ICommand
 		return "Show the actual configuration";
 	}
 
-	@Override
-	public void execute(Configuration config)
+	public static void print(Configuration config, PrintStream printer, boolean closePrinter)
 	{
 		HelpStream.toStream(config.getKeys()) //
 			.sorted() //
-			.forEach(k -> TheDemo.out().printf("%s: %s\n", k, config.get(Object.class, k)));
+			.forEach(k -> printer.printf("%s: %s\n", k, config.get(Object.class, k)));
+
+		if (closePrinter)
+			printer.close();
 	}
 
+	@Override
+	public void execute(Configuration config)
+	{
+		print(config, TheDemo.out(), false);
+	}
 }

@@ -33,6 +33,7 @@ final class ComQuerying implements ICommand
 		OutputPattern(Option.builder().longOpt("querying.output.pattern").desc("Output path for save results in files").build()) //
 		, QueryEach(Option.builder().longOpt("querying.each").desc("(bool) Results query by query").build()) //
 		, DisplayAnswers(Option.builder().longOpt("querying.display.answers").desc("(bool) Display the answers").build()) //
+		, ConfigPrint(Option.builder().longOpt("querying.config.print").desc("(bool) Print the config in a file").build()) //
 		;
 
 		Option opt;
@@ -207,6 +208,9 @@ final class ComQuerying implements ICommand
 			TheDemo.measure("query.eval.stream.action", CPUTimeBenchmark.minus(qeval, qstream));
 			TheDemo.measure("answers", "total", count[0]);
 			qeval.plus(createStreamMeas);
+
+			if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
+				ComConfig.print(config, outputFilePrinter("config"), true);
 		}
 		catch (URISyntaxException e)
 		{
