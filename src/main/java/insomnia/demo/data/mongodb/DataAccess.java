@@ -50,7 +50,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
 
 		batchSize = config.getInt("mongodb.batchSize", 100);
-//		System.out.printf("bsize: %d\n", batchSize);
 	}
 
 	// ==========================================================================
@@ -65,6 +64,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		var tb = new TreeBuilder<Object, KVLabel>();
 		bson2Tree(tb, doc.toBsonDocument());
 		return Trees.create(tb);
+	}
+
+	@Override
+	public ITree<Object, KVLabel> nativeToTree(Object nativeRecord)
+	{
+		return doc2Tree((Document) nativeRecord);
 	}
 
 	private static void bson2Tree(TreeBuilder<Object, KVLabel> sb, BsonValue doc)
@@ -115,9 +120,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			throw new IllegalArgumentException(String.format("Cannot handle %s value", doc));
 	}
 
-	private static Bson tree2Query(ITree<Object, KVLabel> tree)
+	private static Bson tree2Query(ITree<Object, KVLabel> tree, CPUTimeBenchmark time)
 	{
+		time.startChrono();
 		var filter = tree2Query(tree, tree.getRoot());
+		time.stopChrono();
 		return filter;
 	}
 
@@ -201,44 +208,44 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			.map(DataAccess::doc2Tree);
 	}
 
-	private Stream<ITree<Object, KVLabel>> wrapDocumentCursor(FindIterable<Document> cursor, UFunctionTransform<Object, KVLabel> userWrap)
+	private Stream<Object> wrapDocumentCursor(FindIterable<Document> cursor)
 	{
-		if (userWrap == null)
-			return HelpStream.toStream(cursor).map(DataAccess::doc2Tree);
-		else
-		{
-			var transform = userWrap.transform(o -> doc2Tree((Document) o));
-			return HelpStream.toStream(cursor).map(m -> transform.apply(m));
-		}
+		return HelpStream.<Object>toStreamDownCast(cursor);
 	}
 
 	@Override
-	public Stream<Pair<ITree<Object, KVLabel>, Stream<ITree<Object, KVLabel>>>> executeEach(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap, CPUTimeBenchmark firstEval)
+	public Stream<Pair<ITree<Object, KVLabel>, Stream<Object>>> executeEach(Stream<ITree<Object, KVLabel>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native)
 	{
 		return queries.map(q -> {
-			var bsonq = tree2Query(q);
+			var bsonq = tree2Query(q, query2native);
 			firstEval.startChrono();
 			var cursor = collection.find(bsonq);
 			firstEval.stopChrono();
-			return Pair.of(q, wrapDocumentCursor(cursor, userWrap));
+			return Pair.of(q, wrapDocumentCursor(cursor));
 		});
 	}
 
-	private Stream<ITree<Object, KVLabel>> execute(List<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap, CPUTimeBenchmark firstEval)
+	private Stream<Object> execute(List<ITree<Object, KVLabel>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native)
 	{
-		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), DataAccess::tree2Query));
+		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), t -> tree2Query(t, query2native)));
 		firstEval.startChrono();
 		var cursor = collection.find(disjunction);
 		firstEval.stopChrono();
-		return wrapDocumentCursor(cursor, userWrap);
+		return wrapDocumentCursor(cursor);
 	}
 
 	@Override
-	public Stream<ITree<Object, KVLabel>> execute(Stream<ITree<Object, KVLabel>> queries, UFunctionTransform<Object, KVLabel> userWrap, CPUTimeBenchmark firstEval)
+	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native)
 	{
 		var batch = HelpStream.batch(queries, batchSize);
 
-		return batch.flatMap(q -> execute(q, userWrap, firstEval));
+		return batch.flatMap(q -> execute(q, firstEval, query2native));
+	}
+
+	@Override
+	public String getRecordId(Object record)
+	{
+		return ((Document) record).getObjectId("_id").toHexString();
 	}
 
 	@Override

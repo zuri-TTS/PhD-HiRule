@@ -19,9 +19,13 @@ public interface IDataAccess<VAL, LBL>
 
 	Stream<ITree<VAL, LBL>> all();
 
-	Stream<ITree<VAL, LBL>> execute(Stream<ITree<VAL, LBL>> queries, UFunctionTransform<VAL, LBL> userWrap, CPUTimeBenchmark firstEval);
+	Stream<Object> execute(Stream<ITree<VAL, LBL>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native);
 
-	Stream<Pair<ITree<VAL, LBL>, Stream<ITree<VAL, LBL>>>> executeEach(Stream<ITree<VAL, LBL>> queries, UFunctionTransform<VAL, LBL> userWrap, CPUTimeBenchmark firstEval);
+	Stream<Pair<ITree<VAL, LBL>, Stream<Object>>> executeEach(Stream<ITree<VAL, LBL>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native);
+
+	ITree<VAL, LBL> nativeToTree(Object nativeRecord);
+
+	String getRecordId(Object record);
 
 	void writeInfos(PrintWriter printer);
 }
