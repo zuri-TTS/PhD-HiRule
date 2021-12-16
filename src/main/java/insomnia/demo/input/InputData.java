@@ -120,7 +120,12 @@ public final class InputData
 		if (opt.isEmpty())
 			return tryOpenOutputPath(Paths.get(uri));
 
-		return opt.get().toURL().openConnection().getOutputStream();
+		var theUrl = opt.get().toURL();
+
+		if (theUrl.getProtocol().equals("file"))
+			return tryOpenOutputPath(Paths.get(uri.substring(7)));
+
+		return theUrl.openConnection().getOutputStream();
 	}
 
 	public static Stream<String> getLinesOf(String uri) throws IOException
