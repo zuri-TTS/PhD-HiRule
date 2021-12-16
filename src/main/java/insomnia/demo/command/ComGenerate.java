@@ -72,8 +72,9 @@ final class ComGenerate implements ICommand
 	{
 		var mes = TheDemo.measure("query.rewriting");
 		return c -> {
+			var mod = BUFTATerminalRuleApplier.getMod(rules);
 			mes.startChrono();
-			BUFTATerminalRuleApplier.getMod(rules).accept(c);
+			mod.accept(c);
 			mes.stopChrono();
 		};
 	}
