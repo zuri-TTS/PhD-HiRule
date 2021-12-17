@@ -25,13 +25,13 @@ import com.mongodb.client.model.Filters;
 
 import insomnia.data.INode;
 import insomnia.data.ITree;
+import insomnia.demo.TheDemo;
 import insomnia.demo.data.IDataAccess;
 import insomnia.implem.data.Trees;
 import insomnia.implem.data.creational.TreeBuilder;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.kv.data.KVValues;
-import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpStream;
 
 public final class DataAccess implements IDataAccess<Object, KVLabel>
@@ -120,11 +120,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			throw new IllegalArgumentException(String.format("Cannot handle %s value", doc));
 	}
 
-	private static Bson tree2Query(ITree<Object, KVLabel> tree, CPUTimeBenchmark time)
+	private static Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
-		time.startChrono();
+		var q2native = TheDemo.measure("each.query.query2native");
+		q2native.startChrono();
 		var filter = tree2Query(tree, tree.getRoot());
-		time.stopChrono();
+		q2native.stopChrono();
 		return filter;
 	}
 
@@ -214,10 +215,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public Stream<Pair<ITree<Object, KVLabel>, Stream<Object>>> executeEach(Stream<ITree<Object, KVLabel>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native)
+	public Stream<Pair<ITree<Object, KVLabel>, Stream<Object>>> executeEach(Stream<ITree<Object, KVLabel>> queries)
 	{
+		var firstEval = TheDemo.measure("query.eval.stream.create");
+
 		return queries.map(q -> {
-			var bsonq = tree2Query(q, query2native);
+			var bsonq = tree2Query(q);
 			firstEval.startChrono();
 			var cursor = collection.find(bsonq);
 			firstEval.stopChrono();
@@ -225,9 +228,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		});
 	}
 
-	private Stream<Object> execute(List<ITree<Object, KVLabel>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native)
+	private Stream<Object> execute(List<ITree<Object, KVLabel>> queries)
 	{
-		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), t -> tree2Query(t, query2native)));
+		var firstEval = TheDemo.measure("query.eval.stream.create");
+
+		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), DataAccess::tree2Query));
 		firstEval.startChrono();
 		var cursor = collection.find(disjunction);
 		firstEval.stopChrono();
@@ -235,11 +240,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native)
+	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries)
 	{
 		var batch = HelpStream.batch(queries, batchSize);
 
-		return batch.flatMap(q -> execute(q, firstEval, query2native));
+		return batch.flatMap(this::execute);
 	}
 
 	@Override

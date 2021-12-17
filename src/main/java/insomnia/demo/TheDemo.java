@@ -36,6 +36,7 @@ public final class TheDemo
 
 	private static void setup()
 	{
+		setMeasurePrefix("");
 		URL.setURLStreamHandlerFactory(URLStreamHandlerFactories.of(Map.<String, URLStreamHandler>of( //
 			"ressource", URLStreamHandlers.from(HelpFunctions.unchecked(u -> {
 				var path = u.getPath().substring(1); // Avoid the '/' first char
@@ -72,14 +73,43 @@ public final class TheDemo
 		return set;
 	}
 
+	// ==========================================================================
+
+	private static String  measurePrefix = "";
+	private static boolean hasPrefix;
+
+	public static String getMeasurePrefix()
+	{
+		return measurePrefix;
+	}
+
+	public static boolean measureHasPrefix()
+	{
+		return hasPrefix;
+	}
+
+	public static void setMeasurePrefix(String pref)
+	{
+		measurePrefix = pref;
+		hasPrefix     = !pref.isEmpty();
+	}
+
+	private static String getMeasureName(String name)
+	{
+		if (hasPrefix)
+			return measurePrefix + "." + name;
+
+		return name;
+	}
+
 	public static void measure(String group, String name, int set)
 	{
-		measures.set(group, name, set);
+		measures.set(group, getMeasureName(name), set);
 	}
 
 	public static CPUTimeBenchmark measure(String name, CPUTimeBenchmark set)
 	{
-		measures.set("measures", name, set);
+		measures.set("measures", getMeasureName(name), set);
 		return set;
 	}
 
@@ -92,6 +122,8 @@ public final class TheDemo
 	{
 		return System.out;
 	}
+
+	// ==========================================================================
 
 	public static void main(String[] args) throws IOException, ParseException
 	{

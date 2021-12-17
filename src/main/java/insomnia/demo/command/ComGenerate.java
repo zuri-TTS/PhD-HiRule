@@ -25,6 +25,7 @@ import insomnia.implem.fsa.fta.buftachunk.modifier.IBUFTAChunkModifier;
 import insomnia.implem.fsa.fta.creational.BUFTABuilder;
 import insomnia.implem.kv.KV;
 import insomnia.implem.kv.data.KVLabel;
+import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.rule.IRule;
 
 final class ComGenerate implements ICommand
@@ -68,14 +69,13 @@ final class ComGenerate implements ICommand
 
 	// ==========================================================================
 
-	private static IBUFTAChunkModifier<Object, KVLabel> rewriteMod(Collection<? extends IRule<Object, KVLabel>> rules)
+	private static IBUFTAChunkModifier<Object, KVLabel> rewriteMod(Collection<? extends IRule<Object, KVLabel>> rules, CPUTimeBenchmark meas)
 	{
-		var mes = TheDemo.measure("query.rewriting");
 		return c -> {
 			var mod = BUFTATerminalRuleApplier.getMod(rules);
-			mes.startChrono();
+			meas.startChrono();
 			mod.accept(c);
-			mes.stopChrono();
+			meas.stopChrono();
 		};
 	}
 
@@ -83,8 +83,19 @@ final class ComGenerate implements ICommand
 	{
 		var query = Query.get(config);
 		var rules = Rules.get(config);
-		return BUFTABuilder.create(query, KV.fsaInterpretation()) //
-			.setChunkModifier(rewriteMod(rules)).create();
+
+		var rewriteMeas = TheDemo.measure("query.rewriting.rules");
+		var createMeas  = TheDemo.measure("query.rewriting.total");
+
+		var builder = BUFTABuilder.create(query, KV.fsaInterpretation()) //
+			.setChunkModifier(rewriteMod(rules, rewriteMeas));
+
+		createMeas.startChrono();
+		var ret = builder.create();
+		createMeas.stopChrono();
+
+//		TheDemo.measure("query.rewriting.create", CPUTimeBenchmark.minus(createMeas, TheDemo.measure("query.rewriting.rules")));
+		return ret;
 	}
 
 	// ==========================================================================

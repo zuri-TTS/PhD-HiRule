@@ -69,11 +69,20 @@ final class ComQuerying implements ICommand
 
 	private String outputPattern;
 
+	private String getFileName(String file)
+	{
+		if (TheDemo.measureHasPrefix())
+			return TheDemo.getMeasurePrefix() + "-" + file;
+
+		return file;
+	}
+
 	private PrintStream outputFilePrinter(String fileName, OpenOption... options)
 	{
 		if (outputPattern == null)
 			return new PrintStream(OutputStream.nullOutputStream());
 
+		fileName = getFileName(fileName);
 		var filePath = Path.of(String.format(outputPattern, fileName));
 
 		return new PrintStream(InputData.fakeOpenOutputPath(filePath, options));
@@ -83,11 +92,11 @@ final class ComQuerying implements ICommand
 
 	private void executeEach(Configuration config) throws Exception
 	{
+		TheDemo.setMeasurePrefix("each");
+
 		var dataAccess   = DataAccesses.getDataAccess(config);
 		var resultStream = dataAccess.executeEach( //
-			ComGenerate.queries(config), //
-			TheDemo.measure("each.query.eval.stream.create"), //
-			TheDemo.measure("each.query.query2native") //
+			ComGenerate.queries(config) //
 		);
 
 		List<ITree<Object, KVLabel>> emptyQueries    = new ArrayList<>();
@@ -96,8 +105,8 @@ final class ComQuerying implements ICommand
 
 		int nbQueries[] = new int[1];
 		{
-			var qout    = new PrintStream(outputFilePrinter("each-qresults"));
-			var qnempty = new PrintStream(outputFilePrinter("each-non-empty"));
+			var qout    = new PrintStream(outputFilePrinter("qresults"));
+			var qnempty = new PrintStream(outputFilePrinter("non-empty"));
 
 			resultStream.forEach(p -> {
 				nbQueries[0]++;
@@ -118,26 +127,23 @@ final class ComQuerying implements ICommand
 			qout.close();
 			qnempty.close();
 		}
-		TheDemo.measure("each.reformulations", "empty", emptyQueries.size());
-		TheDemo.measure("each.reformulations", "non-empty", nbQueries[0] - emptyQueries.size());
-		TheDemo.measure("each.reformulations", "total", nbQueries[0]);
-		TheDemo.measure("each.answers", "total", allRecords.size());
-		TheDemo.measure("each.answers", "unique", allRecords.uniqueSet().size());
+		TheDemo.measure("reformulations", "empty", emptyQueries.size());
+		TheDemo.measure("reformulations", "non-empty", nbQueries[0] - emptyQueries.size());
+		TheDemo.measure("reformulations", "total", nbQueries[0]);
+		TheDemo.measure("answers", "total", allRecords.size());
+		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
 
-		var printer = outputFilePrinter("each-empty");
+		var printer = outputFilePrinter("empty");
 		emptyQueries.forEach(printer::println);
 		printer.close();
 
-		printer = outputFilePrinter("each-answers");
+		printer = outputFilePrinter("answers");
 		allRecords.forEach(printer::println);
 		printer.close();
 
-		printer = outputFilePrinter("each-answers-unique");
+		printer = outputFilePrinter("answers-unique");
 		allRecords.uniqueSet().forEach(printer::println);
 		printer.close();
-
-//		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
-//			ComConfig.print(config, outputFilePrinter("each-config"), true);
 
 		executeBatch(config, nonEmptyQueries.stream());
 	}
@@ -159,16 +165,12 @@ final class ComQuerying implements ICommand
 
 	private void executeBatch(Configuration config, Stream<ITree<Object, KVLabel>> queries) throws Exception
 	{
+		TheDemo.setMeasurePrefix("");
+
 		try
 		{
-			var createStreamMeas = TheDemo.measure("query.eval.stream.create");
-
 			var dataAccess   = DataAccesses.getDataAccess(config);
-			var resultStream = dataAccess.execute( //
-				queries, //
-				createStreamMeas, //
-				TheDemo.measure("query.query2native") //
-			);
+			var resultStream = dataAccess.execute(queries);
 
 			var         qeval      = TheDemo.measure("query.eval.total");
 			var         qstream    = TheDemo.measure("query.eval.stream");
@@ -201,7 +203,7 @@ final class ComQuerying implements ICommand
 			TheDemo.measure("query.eval.stream.action", CPUTimeBenchmark.minus(qeval, qstream));
 			TheDemo.measure("answers", "total", allRecords.size());
 			TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
-			qeval.plus(createStreamMeas);
+			qeval.plus(TheDemo.measure("query.eval.stream.create"));
 
 			if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
 				ComConfig.print(config, outputFilePrinter("config"), true);

@@ -7,7 +7,6 @@ import java.util.stream.Stream;
 import org.apache.commons.lang3.tuple.Pair;
 
 import insomnia.data.ITree;
-import insomnia.lib.cpu.CPUTimeBenchmark;
 
 public interface IDataAccess<VAL, LBL>
 {
@@ -19,9 +18,9 @@ public interface IDataAccess<VAL, LBL>
 
 	Stream<ITree<VAL, LBL>> all();
 
-	Stream<Object> execute(Stream<ITree<VAL, LBL>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native);
+	Stream<Object> execute(Stream<ITree<VAL, LBL>> queries);
 
-	Stream<Pair<ITree<VAL, LBL>, Stream<Object>>> executeEach(Stream<ITree<VAL, LBL>> queries, CPUTimeBenchmark firstEval, CPUTimeBenchmark query2native);
+	Stream<Pair<ITree<VAL, LBL>, Stream<Object>>> executeEach(Stream<ITree<VAL, LBL>> queries);
 
 	ITree<VAL, LBL> nativeToTree(Object nativeRecord);
 
