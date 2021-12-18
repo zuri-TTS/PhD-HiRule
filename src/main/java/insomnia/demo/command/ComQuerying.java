@@ -2,10 +2,8 @@ package insomnia.demo.command;
 
 import java.io.OutputStream;
 import java.io.PrintStream;
-import java.net.URISyntaxException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -20,7 +18,9 @@ import org.apache.commons.configuration2.Configuration;
 import insomnia.data.ITree;
 import insomnia.demo.TheDemo;
 import insomnia.demo.data.DataAccesses;
+import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.InputData;
+import insomnia.demo.input.Query;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 
@@ -99,43 +99,49 @@ final class ComQuerying implements ICommand
 			ComGenerate.queries(config) //
 		);
 
-		List<ITree<Object, KVLabel>> emptyQueries    = new ArrayList<>();
-		List<ITree<Object, KVLabel>> nonEmptyQueries = new ArrayList<>();
-		Bag<String>                  allRecords      = new HashBag<>();
+		Bag<String> allRecords = new HashBag<>();
 
 		int nbQueries[] = new int[1];
+		int nbEmpties[] = new int[1];
 		{
-			var qout    = new PrintStream(outputFilePrinter("qresults"));
-			var qnempty = new PrintStream(outputFilePrinter("non-empty"));
+			var qout          = new PrintStream(outputFilePrinter("qresults"));
+			var qempty        = new PrintStream(outputFilePrinter("query-empty"));
+			var qnempty       = new PrintStream(outputFilePrinter("query-non-empty"));
+			var qnativeempty  = new PrintStream(outputFilePrinter("native-empty"));
+			var qnativenempty = new PrintStream(outputFilePrinter("native-non-empty"));
 
 			resultStream.forEach(p -> {
 				nbQueries[0]++;
 				var query   = p.getLeft();
+				var nativeQ = p.getMiddle();
 				var records = p.getRight().map(dataAccess::getRecordId).collect(Collectors.toList());
 
 				if (records.isEmpty())
-					emptyQueries.add(query);
+				{
+					nbEmpties[0]++;
+					dataAccess.encodeNativeQuery(nativeQ, qnativeempty);
+					qempty.println(query);
+				}
 				else
 				{
-					nonEmptyQueries.add(query);
 					qout.printf("\n\n%s\n", query.toString());
 					records.forEach(qout::println);
 					allRecords.addAll(records);
+					dataAccess.encodeNativeQuery(nativeQ, qnativenempty);
 					qnempty.printf("%s\n%s\n\n", query, records.size());
 				}
 			});
 			qout.close();
 			qnempty.close();
+			qnativenempty.close();
 		}
-		TheDemo.measure("reformulations", "empty", emptyQueries.size());
-		TheDemo.measure("reformulations", "non-empty", nbQueries[0] - emptyQueries.size());
+		TheDemo.measure("reformulations", "empty", nbEmpties[0]);
+		TheDemo.measure("reformulations", "non-empty", nbQueries[0] - nbEmpties[0]);
 		TheDemo.measure("reformulations", "total", nbQueries[0]);
 		TheDemo.measure("answers", "total", allRecords.size());
 		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
 
-		var printer = outputFilePrinter("empty");
-		emptyQueries.forEach(printer::println);
-		printer.close();
+		PrintStream printer;
 
 		printer = outputFilePrinter("answers");
 		allRecords.forEach(printer::println);
@@ -145,7 +151,7 @@ final class ComQuerying implements ICommand
 		allRecords.uniqueSet().forEach(printer::println);
 		printer.close();
 
-		executeBatch(config, nonEmptyQueries.stream());
+//		executeBatch(config, nonEmptyQueries.stream());
 	}
 
 	public void execute(Configuration config) throws Exception
@@ -155,7 +161,21 @@ final class ComQuerying implements ICommand
 		if (config.getBoolean(MyOptions.QueryEach.opt.getLongOpt(), false))
 			executeEach(config);
 		else
-			executeBatch(config);
+		{
+			if (Query.isNative(config))
+				executeNative(config);
+			else
+				executeBatch(config);
+		}
+	}
+
+	private void executeNative(Configuration config) throws Exception
+	{
+		var qnatives   = Query.getNatives(config);
+		var dataAccess = DataAccesses.getDataAccess(config);
+
+		var resultStream = dataAccess.executeNatives(qnatives);
+		executeBatch(config, dataAccess, resultStream);
 	}
 
 	private void executeBatch(Configuration config) throws Exception
@@ -165,52 +185,50 @@ final class ComQuerying implements ICommand
 
 	private void executeBatch(Configuration config, Stream<ITree<Object, KVLabel>> queries) throws Exception
 	{
+		var dataAccess   = DataAccesses.getDataAccess(config);
+		var resultStream = dataAccess.execute(queries);
+		executeBatch(config, dataAccess, resultStream);
+	}
+
+	private void executeBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream) throws Exception
+	{
 		TheDemo.setMeasurePrefix("");
 
-		try
+		var         qeval      = TheDemo.measure("query.eval.total");
+		var         qstream    = TheDemo.measure("query.eval.stream");
+		Bag<String> allRecords = new HashBag<>();
+
 		{
-			var dataAccess   = DataAccesses.getDataAccess(config);
-			var resultStream = dataAccess.execute(queries);
+			var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
+			var ans_out        = new PrintStream( //
+				displayAnswers ? outputFilePrinter("answers") : PrintStream.nullOutputStream() //
+			);
 
-			var         qeval      = TheDemo.measure("query.eval.total");
-			var         qstream    = TheDemo.measure("query.eval.stream");
-			Bag<String> allRecords = new HashBag<>();
+			Consumer<String> displayProcess = displayAnswers //
+				? r -> ans_out.println(r) //
+				: r -> {
+				};
 
+			CPUTimeBenchmark.startChrono(qeval, qstream);
 			{
-				var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
-				var ans_out        = new PrintStream( //
-					displayAnswers ? outputFilePrinter("answers") : PrintStream.nullOutputStream() //
-				);
-
-				Consumer<String> displayProcess = displayAnswers //
-					? r -> ans_out.println(r) //
-					: r -> {
-					};
-
-				CPUTimeBenchmark.startChrono(qeval, qstream);
-				{
-					resultStream.forEach(r -> {
-						qstream.stopChrono();
-						var id = dataAccess.getRecordId(r);
-						allRecords.add(id);
-						displayProcess.accept(id);
-						qstream.startChrono();
-					});
-				}
-				CPUTimeBenchmark.stopChrono(qeval, qstream);
-				ans_out.close();
+				resultStream.forEach(r -> {
+					qstream.stopChrono();
+					var id = dataAccess.getRecordId(r);
+					allRecords.add(id);
+					displayProcess.accept(id);
+					qstream.startChrono();
+				});
 			}
-			TheDemo.measure("query.eval.stream.action", CPUTimeBenchmark.minus(qeval, qstream));
-			TheDemo.measure("answers", "total", allRecords.size());
-			TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
-			qeval.plus(TheDemo.measure("query.eval.stream.create"));
+			CPUTimeBenchmark.stopChrono(qeval, qstream);
+			ans_out.close();
+		}
+		TheDemo.measure("query.eval.stream.action", CPUTimeBenchmark.minus(qeval, qstream));
+		TheDemo.measure("answers", "total", allRecords.size());
+		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
+		TheDemo.measure("queries", "total", (int) dataAccess.getNbQueries());
+		qeval.plus(TheDemo.measure("query.eval.stream.create"));
 
-			if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
-				ComConfig.print(config, outputFilePrinter("config"), true);
-		}
-		catch (URISyntaxException e)
-		{
-			throw new IllegalArgumentException(e);
-		}
+		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
+			ComConfig.print(config, outputFilePrinter("config"), true);
 	}
 }

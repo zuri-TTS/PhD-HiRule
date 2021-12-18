@@ -1,13 +1,16 @@
 package insomnia.demo.input;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.text.ParseException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
 import insomnia.demo.TheConfiguration;
+import insomnia.demo.data.DataAccesses;
 import insomnia.demo.input.InputData.Filters;
 import insomnia.implem.kv.KV;
 import insomnia.implem.kv.data.KVLabel;
@@ -41,5 +44,20 @@ public final class Query
 
 		var s = data.stream().reduce((a, b) -> a + b).get();
 		return KV.treeFromString(s);
+	}
+
+	public static boolean isNative(Configuration config)
+	{
+		var qnative = config.getString(TheConfiguration.OneProperty.QueryNative.getPropertyName(), "");
+
+		return !qnative.isEmpty();
+	}
+
+	public static Stream<Object> getNatives(Configuration config) throws IOException, URISyntaxException
+	{
+		var file       = InputData.tryOpenStream(config.getString(TheConfiguration.OneProperty.QueryNative.getPropertyName(), ""));
+		var dataAccess = DataAccesses.getDataAccess(config);
+
+		return InputData.getLinesOf(file).map(dataAccess::decodeNativeQuery);
 	}
 }

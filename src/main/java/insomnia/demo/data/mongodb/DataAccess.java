@@ -1,14 +1,15 @@
 package insomnia.demo.data.mongodb;
 
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
-import org.apache.commons.collections4.IteratorUtils;
+import org.apache.commons.collections4.IterableUtils;
 import org.apache.commons.configuration2.Configuration;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.Triple;
 import org.bson.BsonDouble;
 import org.bson.BsonString;
 import org.bson.BsonType;
@@ -70,6 +71,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public ITree<Object, KVLabel> nativeToTree(Object nativeRecord)
 	{
 		return doc2Tree((Document) nativeRecord);
+	}
+
+	@Override
+	public Object treeToQNative(ITree<Object, KVLabel> query)
+	{
+		return tree2Query(query);
 	}
 
 	private static void bson2Tree(TreeBuilder<Object, KVLabel> sb, BsonValue doc)
@@ -215,7 +222,22 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public Stream<Pair<ITree<Object, KVLabel>, Stream<Object>>> executeEach(Stream<ITree<Object, KVLabel>> queries)
+	public void encodeNativeQuery(Object query, PrintStream printer)
+	{
+		Bson qnative = (Bson) query;
+		printer.println(qnative.toBsonDocument().toJson());
+	}
+
+	@Override
+	public Object decodeNativeQuery(String from)
+	{
+		return Document.parse(from);
+	}
+
+	// ==========================================================================
+
+	@Override
+	public Stream<Triple<ITree<Object, KVLabel>, Object, Stream<Object>>> executeEach(Stream<ITree<Object, KVLabel>> queries)
 	{
 		var firstEval = TheDemo.measure("query.eval.stream.create");
 
@@ -224,27 +246,58 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			firstEval.startChrono();
 			var cursor = collection.find(bsonq);
 			firstEval.stopChrono();
-			return Pair.of(q, wrapDocumentCursor(cursor));
+			return Triple.of(q, bsonq, wrapDocumentCursor(cursor));
 		});
 	}
 
 	private Stream<Object> execute(List<ITree<Object, KVLabel>> queries)
 	{
+		return executeBson(IterableUtils.transformedIterable(queries, DataAccess::tree2Query));
+	}
+
+	@SuppressWarnings("unchecked")
+	private Stream<Object> executeNative(List<? extends Object> queries)
+	{
+		return executeBson((List<Bson>) queries);
+	}
+
+	private Stream<Object> executeBson(Iterable<Bson> queries)
+	{
 		var firstEval = TheDemo.measure("query.eval.stream.create");
 
-		var disjunction = Filters.or(() -> IteratorUtils.transformedIterator(queries.iterator(), DataAccess::tree2Query));
+		var disjunction = Filters.or(queries);
 		firstEval.startChrono();
 		var cursor = collection.find(disjunction);
 		firstEval.stopChrono();
 		return wrapDocumentCursor(cursor);
 	}
 
+	// ==========================================================================
+
+	private long[] nbQueries;
+
 	@Override
 	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries)
 	{
-		var batch = HelpStream.batch(queries, batchSize);
+		nbQueries = new long[] { 0 };
+		var batch = HelpStream.batch(queries, batchSize, nbQueries);
 
 		return batch.flatMap(this::execute);
+	}
+
+	@Override
+	public long getNbQueries()
+	{
+		return nbQueries[0];
+	}
+
+	@Override
+	public Stream<Object> executeNatives(Stream<Object> nativeQueries)
+	{
+		nbQueries = new long[] { 0 };
+		var batch = HelpStream.batch(nativeQueries, batchSize, nbQueries);
+
+		return batch.flatMap(this::executeNative);
 	}
 
 	@Override

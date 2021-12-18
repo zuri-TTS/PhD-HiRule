@@ -32,6 +32,7 @@ public final class TheConfiguration
 	public enum OneProperty
 	{
 		Query("query") //
+		, QueryNative("query.native") //
 		, Rules("rules") //
 		, Summary("summary") //
 		;
