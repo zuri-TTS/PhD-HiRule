@@ -44,6 +44,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private int batchSize;
 
+	private boolean checkTerminalLeaf;
+
 	private DataAccess(URI uri, Configuration config)
 	{
 		connection = new ConnectionString(uri.toString());
@@ -51,6 +53,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
 
 		batchSize = config.getInt("mongodb.batchSize", 100);
+
+		checkTerminalLeaf = config.getBoolean("mongodb.leaf.checkTerminal", true);
 	}
 
 	// ==========================================================================
@@ -127,7 +131,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			throw new IllegalArgumentException(String.format("Cannot handle %s value", doc));
 	}
 
-	private static Bson tree2Query(ITree<Object, KVLabel> tree)
+	private Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
 		var q2native = TheDemo.measure("each.query.query2native");
 		q2native.startChrono();
@@ -136,7 +140,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return filter;
 	}
 
-	private static Bson tree2Query( //
+	private Bson tree2Query( //
 		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node //
 	)
 	{
@@ -167,7 +171,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 					if (value == null || KVValues.interpretation().isAny(value))
 					{
-						if (c.getChild().isTerminal())
+						if (c.getChild().isTerminal() && checkTerminalLeaf)
 							filter = //
 								Filters.and( //
 									Filters.not( //
@@ -251,7 +255,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private Stream<Object> execute(List<ITree<Object, KVLabel>> queries)
 	{
-		return executeBson(IterableUtils.transformedIterable(queries, DataAccess::tree2Query));
+		return executeBson(IterableUtils.transformedIterable(queries, this::tree2Query));
 	}
 
 	@SuppressWarnings("unchecked")
