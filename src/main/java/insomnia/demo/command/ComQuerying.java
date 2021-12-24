@@ -196,6 +196,7 @@ final class ComQuerying implements ICommand
 
 		var         qeval      = TheDemo.measure("query.eval.total");
 		var         qstream    = TheDemo.measure("query.eval.stream");
+		var         qaction    = TheDemo.measure("query.eval.stream.action");
 		Bag<String> allRecords = new HashBag<>();
 
 		{
@@ -213,16 +214,18 @@ final class ComQuerying implements ICommand
 			{
 				resultStream.forEach(r -> {
 					qstream.stopChrono();
+					qaction.startChrono();
 					var id = dataAccess.getRecordId(r);
 					allRecords.add(id);
 					displayProcess.accept(id);
+					qaction.stopChrono();
 					qstream.startChrono();
 				});
 			}
 			CPUTimeBenchmark.stopChrono(qeval, qstream);
 			ans_out.close();
 		}
-		TheDemo.measure("query.eval.stream.action", CPUTimeBenchmark.minus(qeval, qstream));
+		TheDemo.measure("query.eval.stream.action2", CPUTimeBenchmark.minus(qeval, qstream));
 		TheDemo.measure("answers", "total", allRecords.size());
 		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
 		TheDemo.measure("queries", "total", (int) dataAccess.getNbQueries());
