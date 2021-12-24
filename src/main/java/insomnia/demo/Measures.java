@@ -40,6 +40,11 @@ public final class Measures
 		set_(group, measure, val);
 	}
 
+	public void set(String group, String measureName, String set)
+	{
+		set_(group, measureName, set);
+	}
+
 	public void set(String group, String measure, int val)
 	{
 		set_(group, measure, val);

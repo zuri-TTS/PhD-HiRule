@@ -102,6 +102,11 @@ public final class TheDemo
 		return name;
 	}
 
+	public static void measure(String group, String name, String set)
+	{
+		measures.set(group, getMeasureName(name), set);
+	}
+
 	public static void measure(String group, String name, int set)
 	{
 		measures.set(group, getMeasureName(name), set);
