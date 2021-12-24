@@ -170,8 +170,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 						if (c.getChild().isTerminal())
 							filter = //
 								Filters.and( //
-									Filters.exists(label) //
-									, Filters.not( //
+									Filters.not( //
 										Filters.elemMatch(label, //
 											Filters.or( //
 												Filters.type(label, BsonType.ARRAY), //
