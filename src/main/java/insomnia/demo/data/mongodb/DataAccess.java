@@ -174,6 +174,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 						if (c.getChild().isTerminal() && checkTerminalLeaf)
 							filter = //
 								Filters.and( //
+									Filters.exists(label), //
 									Filters.not( //
 										Filters.elemMatch(label, //
 											Filters.or( //
