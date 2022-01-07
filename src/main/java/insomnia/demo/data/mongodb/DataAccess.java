@@ -44,6 +44,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	private enum MyOptions
 	{
 		QUERY_BATCHSIZE(Option.builder().longOpt("query.batchSize").desc("(int) How many queries to send at once to MongoDB").build()), //
+		DATA_BATCHSIZE(Option.builder().longOpt("data.batchSize").desc("(int) How many records MongoDB must batch").build()), //
 		LEAF_CHECKTERMINAL(Option.builder().longOpt("leaf.checkTerminal").desc("(bool) If true, the native MongoDB query will have constraints to check if a terminal node in the query is a terminal node in the result").build()), //
 		INHIBIT_BATCH_STREAM_TIME(Option.builder().longOpt("inhibitBatchStreamTime").desc("(bool) If true, does it best to not count the time passed in the result stream to construct batches of reformulations").build()), //
 		;
@@ -73,7 +74,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private MongoCollection<Document> collection;
 
-	private int batchSize;
+	private int queryBatchSize, dataBatchSize;
 
 	private boolean checkTerminalLeaf;
 
@@ -88,7 +89,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		client     = MongoClients.create(connection);
 		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
 
-		batchSize              = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getOpt(), 100);
+		queryBatchSize         = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getOpt(), 100);
+		dataBatchSize          = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getOpt(), 0);
 		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getOpt(), true);
 		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getOpt(), true);
 
@@ -301,6 +303,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		var disjunction = Filters.or(queries);
 
 		var cursor = collection.find(disjunction);
+
+		if (dataBatchSize > 0)
+			cursor.batchSize(dataBatchSize);
+
 		return wrapDocumentCursor(cursor);
 	}
 
@@ -338,7 +344,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries)
 	{
 		nbQueries = new long[] { 0 };
-		var batch = batchIt(queries.map(this::tree2Query), batchSize, nbQueries);
+		var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
 
 		return batch.flatMap(this::executeBson);
 	}
@@ -353,7 +359,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public Stream<Object> executeNatives(Stream<Object> nativeQueries)
 	{
 		nbQueries = new long[] { 0 };
-		var batch = batchIt(nativeQueries, batchSize, nbQueries);
+		var batch = batchIt(nativeQueries, queryBatchSize, nbQueries);
 
 		return batch.flatMap(this::executeNative);
 	}
