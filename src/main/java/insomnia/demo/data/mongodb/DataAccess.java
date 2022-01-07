@@ -8,6 +8,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.Stream;
 
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.tuple.Triple;
 import org.bson.BsonDouble;
@@ -39,6 +41,33 @@ import insomnia.lib.help.HelpStream;
 
 public final class DataAccess implements IDataAccess<Object, KVLabel>
 {
+	private enum MyOptions
+	{
+		QUERY_BATCHSIZE(Option.builder().longOpt("query.batchSize").desc("(int) How many queries to send at once to MongoDB").build()), //
+		LEAF_CHECKTERMINAL(Option.builder().longOpt("leaf.checkTerminal").desc("(bool) If true, the native MongoDB query will have constraints to check if a terminal node in the query is a terminal node in the result").build()), //
+		INHIBIT_BATCH_STREAM_TIME(Option.builder().longOpt("inhibitBatchStreamTime").desc("(bool) If true, does it best to not count the time passed in the result stream to construct batches of reformulations").build()), //
+		;
+
+		Option opt;
+
+		private MyOptions(Option o)
+		{
+			opt = o;
+		}
+	}
+
+	public static Options getItsConfigProperties()
+	{
+		var ret = new Options();
+
+		for (var opt : List.of(MyOptions.values()))
+			ret.addOption(opt.opt);
+
+		return ret;
+	}
+
+	// ==========================================================================
+
 	private MongoClient      client;
 	private ConnectionString connection;
 
@@ -55,14 +84,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	private DataAccess(URI uri, Configuration config)
 	{
 		connection = new ConnectionString(uri.toString());
+
 		client     = MongoClients.create(connection);
 		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
 
-		batchSize = config.getInt("mongodb.batchSize", 100);
-
-		checkTerminalLeaf = config.getBoolean("mongodb.leaf.checkTerminal", true);
-
-		inhibitBatchStreamTime = config.getBoolean("mongodb.inhibitBatchStreamTime", true);
+		batchSize              = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getOpt(), 100);
+		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getOpt(), true);
+		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getOpt(), true);
 
 		if (inhibitBatchStreamTime)
 			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);

@@ -16,6 +16,7 @@ import org.apache.commons.collections4.bag.HashBag;
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
+import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.data.DataAccesses;
 import insomnia.demo.data.IDataAccess;
@@ -28,7 +29,7 @@ final class ComQuerying implements ICommand
 {
 	private enum MyOptions
 	{
-		OutputPattern(Option.builder().longOpt("querying.output.pattern").desc("Output path for save results in files").build()) //
+		OutputPattern(Option.builder().longOpt("querying.output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
 		, QueryEach(Option.builder().longOpt("querying.each").desc("(bool) Results query by query").build()) //
 		, DisplayAnswers(Option.builder().longOpt("querying.display.answers").desc("(bool) Display the answers").build()) //
 		, ConfigPrint(Option.builder().longOpt("querying.config.print").desc("(bool) Print the config in a file").build()) //
@@ -46,9 +47,14 @@ final class ComQuerying implements ICommand
 	public Options getConfigProperties()
 	{
 		var ret = new Options();
+		TheConfiguration.getConfigProperties().getOptions().forEach(ret::addOption);
 
 		for (var opt : List.of(MyOptions.values()))
 			ret.addOption(opt.opt);
+
+		for (var entry : DataAccesses.getDataAccessConfigProperties().entrySet())
+			for (var opt : entry.getValue().getOptions())
+				ret.addOption(new Option(null, String.format("[%s]%s", entry.getKey(), opt.getLongOpt()), false, opt.getDescription()));
 
 		return ret;
 	}

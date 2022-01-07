@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.ArrayUtils;
 
@@ -37,6 +39,31 @@ public final class TheDemo
 		setup();
 	}
 
+	// ==========================================================================
+
+	private enum MyOptions
+	{
+		OutputMeasures(Option.builder().longOpt("output.measures").desc("Output URIs for display measures").build()) //
+		;
+
+		Option opt;
+
+		private MyOptions(Option o)
+		{
+			opt = o;
+		}
+	}
+
+	public static Options getConfigProperties()
+	{
+		var ret = new Options();
+		TheConfiguration.getConfigProperties().getOptions().forEach(ret::addOption);
+
+		for (var opt : List.of(MyOptions.values()))
+			ret.addOption(opt.opt);
+
+		return ret;
+	}
 	// ==========================================================================
 
 	public enum TheMeasures
@@ -247,7 +274,7 @@ public final class TheDemo
 			theCommand.execute(config);
 			mes.stopChrono();
 
-			var outMeasures = new PrintStream(InputData.getOutput(List.of(config.getString("output.measures", "std://out").split(","))), true);
+			var outMeasures = new PrintStream(InputData.getOutput(List.of(config.getString(MyOptions.OutputMeasures.opt.getOpt(), "std://out").split(","))), true);
 
 			measures.print(outMeasures);
 		}

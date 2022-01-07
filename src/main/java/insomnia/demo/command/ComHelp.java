@@ -39,10 +39,13 @@ final class ComHelp implements ICommand
 		if (null == cmd)
 			throw new IllegalArgumentException(String.format("Unknowed command `%s`", args.get(0)));
 
+		var configProperties = cmd.getConfigProperties();
+		TheDemo.getConfigProperties().getOptions().forEach(configProperties::addOption);
+
 		var formatter = new HelpFormatter();
 		var header    = cmd.getDescription();
 		header += "\n Warning: these are property to set in the configuration input file, not real cli arguments";
-		formatter.printHelp(new PrintWriter(TheDemo.out(), true), 80, cmd.getName(), header, cmd.getConfigProperties(), 2, 2, "");
+		formatter.printHelp(new PrintWriter(TheDemo.out(), true), 80, cmd.getName(), header, configProperties, 2, 2, "");
 	}
 
 }

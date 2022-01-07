@@ -5,6 +5,7 @@ import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.function.BiFunction;
 
+import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.demo.data.mongodb.DataAccess;
@@ -28,10 +29,23 @@ public final class DataAccesses
 		);
 	}
 
+	private static enum DataAccessConfigProperties
+	{
+		THE_FACTORY;
+
+		Map<String, Options> i = Map.of( //
+			"mongodb", DataAccess.getItsConfigProperties() //
+		);
+	}
+
 	public static IDataAccess<Object, KVLabel> getDataAccess(Configuration config) throws URISyntaxException
 	{
 		var dataUri = new URI(config.getString("data"));
 		return DataAccessFactory.THE_FACTORY.i.get(dataUri.getScheme()).apply(dataUri, config);
 	}
 
+	public static Map<String, Options> getDataAccessConfigProperties()
+	{
+		return DataAccessConfigProperties.THE_FACTORY.i;
+	}
 }

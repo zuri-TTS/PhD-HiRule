@@ -9,6 +9,8 @@ import java.text.ParseException;
 import java.util.List;
 import java.util.function.Supplier;
 
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.AbstractConfiguration;
 import org.apache.commons.configuration2.CompositeConfiguration;
 import org.apache.commons.configuration2.Configuration;
@@ -29,12 +31,39 @@ public final class TheConfiguration
 
 	// ==========================================================================
 
+	private enum MyOptions
+	{
+		Query(Option.builder().longOpt("query").desc("Path to the query file").build()) //
+		, QueryNative(Option.builder().longOpt("query.native").desc("Path to a file of native queries").build()) //
+		, Rules(Option.builder().longOpt("rules").desc("Path to a file of rules or a directory of files").build()) //
+		, Summary(Option.builder().longOpt("summary").desc("Path to the summary file, or empty if no summary").build()) //
+		;
+
+		Option opt;
+
+		private MyOptions(Option o)
+		{
+			opt = o;
+		}
+	}
+
+	public static Options getConfigProperties()
+	{
+		var ret = new Options();
+
+		for (var opt : List.of(MyOptions.values()))
+			ret.addOption(opt.opt);
+
+		return ret;
+	}
+	// ==========================================================================
+
 	public enum OneProperty
 	{
-		Query("query") //
-		, QueryNative("query.native") //
-		, Rules("rules") //
-		, Summary("summary") //
+		Query(MyOptions.Query.opt.getLongOpt()) //
+		, QueryNative(MyOptions.QueryNative.opt.getLongOpt()) //
+		, Rules(MyOptions.Rules.opt.getLongOpt()) //
+		, Summary(MyOptions.Summary.opt.getLongOpt()) //
 		;
 
 		String name;

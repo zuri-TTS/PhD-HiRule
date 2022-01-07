@@ -13,6 +13,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
+import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.input.InputData;
 import insomnia.demo.input.Query;
@@ -48,6 +49,7 @@ final class ComGenerate implements ICommand
 	public Options getConfigProperties()
 	{
 		var ret = new Options();
+		TheConfiguration.getConfigProperties().getOptions().forEach(ret::addOption);
 
 		for (var opt : List.of(MyOptions.values()))
 			ret.addOption(opt.opt);
