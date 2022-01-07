@@ -84,17 +84,16 @@ final class ComGenerate implements ICommand
 		var query = Query.get(config);
 		var rules = Rules.get(config);
 
-		var rewriteMeas = TheDemo.measure("query.rewriting.rules");
-		var createMeas  = TheDemo.measure("query.rewriting.total");
+		var rewriteMeas = TheDemo.measure(TheDemo.TheMeasures.QREWR_RULES_APPLY);
+		var totalMeas   = TheDemo.measure(TheDemo.TheMeasures.QREWR_RULES_TOTAL);
 
 		var builder = BUFTABuilder.create(query, KV.fsaInterpretation()) //
 			.setChunkModifier(rewriteMod(rules, rewriteMeas));
 
-		createMeas.startChrono();
+		totalMeas.startChrono();
 		var ret = builder.create();
-		createMeas.stopChrono();
+		totalMeas.stopChrono();
 
-//		TheDemo.measure("query.rewriting.create", CPUTimeBenchmark.minus(createMeas, TheDemo.measure("query.rewriting.rules")));
 		return ret;
 	}
 

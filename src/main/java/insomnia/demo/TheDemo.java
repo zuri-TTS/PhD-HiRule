@@ -7,8 +7,10 @@ import java.net.URLStreamHandler;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.configuration2.Configuration;
@@ -21,6 +23,7 @@ import insomnia.demo.help.URLStreamHandlers;
 import insomnia.demo.input.InputData;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpFunctions;
+import insomnia.lib.memoization.Memoizers;
 import insomnia.lib.net.StdUrlStreamHandler;
 
 public final class TheDemo
@@ -33,6 +36,60 @@ public final class TheDemo
 	{
 		setup();
 	}
+
+	// ==========================================================================
+
+	public enum TheMeasures
+	{
+		QEVAL_TOTAL("eval.total"), //
+		QEVAL_STREAM_CREATE("eval.stream.create"), //
+		QEVAL_STREAM_NEXT("eval.stream.next"), //
+		QEVAL_STREAM_ACTION("eval.stream.action"), //
+		QEVAL_STREAM_TOTAL("eval.stream.total"), //
+		QEVAL_STREAM_INHIB("eval.stream.inhibited"), //
+		//
+		QREWR_RULES_APPLY("rewriting.rules.apply"), //
+		QREWR_RULES_TOTAL("rewriting.total"), //
+		//
+		QUERY_TO_NATIVE("eval.query2native"), //
+		;
+
+		private String name;
+
+		private TheMeasures(String name)
+		{
+			this.name = name;
+		}
+
+		public String getName()
+		{
+			return name;
+		}
+	}
+
+	public static Map<String, CPUTimeBenchmark> getMeasures(TheMeasures... measures)
+	{
+		var ret = new HashMap<String, CPUTimeBenchmark>();
+
+		for (var m : List.of(measures))
+			ret.put(m.getName(), measure(m.getName()));
+
+		return Map.copyOf(ret);
+	}
+
+	private static Supplier<Map<String, CPUTimeBenchmark>> streamMeasures = Memoizers.lazy(() -> TheDemo.getMeasures( //
+		TheMeasures.QEVAL_STREAM_CREATE, //
+		TheMeasures.QEVAL_STREAM_NEXT, //
+		TheMeasures.QEVAL_STREAM_ACTION, //
+		TheMeasures.QEVAL_STREAM_TOTAL //
+	));
+
+	public static Map<String, CPUTimeBenchmark> getStreamMeasures()
+	{
+		return streamMeasures.get();
+	}
+
+	// ==========================================================================
 
 	private static void setup()
 	{
@@ -57,6 +114,8 @@ public final class TheDemo
 			})))));
 	}
 
+	// ==========================================================================
+
 	public static Measures getMeasures()
 	{
 		return measures;
@@ -65,6 +124,11 @@ public final class TheDemo
 	public static CPUTimeBenchmark measure(String name)
 	{
 		return measures.getTime("measures", name);
+	}
+
+	public static CPUTimeBenchmark measure(TheMeasures m)
+	{
+		return measure(m.getName());
 	}
 
 	public static CPUTimeBenchmark measure(String group, String name, CPUTimeBenchmark set)

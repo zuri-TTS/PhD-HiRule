@@ -4,10 +4,10 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Stream;
 
-import org.apache.commons.collections4.IterableUtils;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.tuple.Triple;
 import org.bson.BsonDouble;
@@ -27,12 +27,14 @@ import com.mongodb.client.model.Filters;
 import insomnia.data.INode;
 import insomnia.data.ITree;
 import insomnia.demo.TheDemo;
+import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
 import insomnia.implem.data.Trees;
 import insomnia.implem.data.creational.TreeBuilder;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.kv.data.KVValues;
+import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpStream;
 
 public final class DataAccess implements IDataAccess<Object, KVLabel>
@@ -46,6 +48,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private boolean checkTerminalLeaf;
 
+	private boolean inhibitBatchStreamTime;
+
+	private CPUTimeBenchmark inhibitTime;
+
 	private DataAccess(URI uri, Configuration config)
 	{
 		connection = new ConnectionString(uri.toString());
@@ -55,6 +61,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		batchSize = config.getInt("mongodb.batchSize", 100);
 
 		checkTerminalLeaf = config.getBoolean("mongodb.leaf.checkTerminal", true);
+
+		inhibitBatchStreamTime = config.getBoolean("mongodb.inhibitBatchStreamTime", true);
+
+		if (inhibitBatchStreamTime)
+			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);
 	}
 
 	// ==========================================================================
@@ -131,9 +142,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			throw new IllegalArgumentException(String.format("Cannot handle %s value", doc));
 	}
 
+	private static CPUTimeBenchmark q2native = TheDemo.measure(TheMeasures.QUERY_TO_NATIVE);
+
 	private Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
-		var q2native = TheDemo.measure("each.query.query2native");
 		q2native.startChrono();
 		var filter = tree2Query(tree, tree.getRoot());
 		q2native.stopChrono();
@@ -243,20 +255,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	@Override
 	public Stream<Triple<ITree<Object, KVLabel>, Object, Stream<Object>>> executeEach(Stream<ITree<Object, KVLabel>> queries)
 	{
-		var firstEval = TheDemo.measure("query.eval.stream.create");
-
 		return queries.map(q -> {
-			var bsonq = tree2Query(q);
-			firstEval.startChrono();
+			var bsonq  = tree2Query(q);
 			var cursor = collection.find(bsonq);
-			firstEval.stopChrono();
 			return Triple.of(q, bsonq, wrapDocumentCursor(cursor));
 		});
-	}
-
-	private Stream<Object> execute(List<ITree<Object, KVLabel>> queries)
-	{
-		return executeBson(IterableUtils.transformedIterable(queries, this::tree2Query));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -267,13 +270,36 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private Stream<Object> executeBson(Iterable<Bson> queries)
 	{
-		var firstEval = TheDemo.measure("query.eval.stream.create");
-
 		var disjunction = Filters.or(queries);
-		firstEval.startChrono();
+
 		var cursor = collection.find(disjunction);
-		firstEval.stopChrono();
 		return wrapDocumentCursor(cursor);
+	}
+
+	// ==========================================================================
+
+	private static Collection<CPUTimeBenchmark> streamMeasures = TheDemo.getMeasures(TheMeasures.QEVAL_STREAM_NEXT, TheMeasures.QEVAL_STREAM_TOTAL).values();
+
+	private void inhibitBatch_start()
+	{
+		CPUTimeBenchmark.stopChrono(streamMeasures);
+		inhibitTime.startChrono();
+	}
+
+	private void inhibitBatch_end()
+	{
+		inhibitTime.stopChrono();
+		CPUTimeBenchmark.startChrono(streamMeasures);
+	}
+
+	private <T> Stream<List<T>> batchIt(Stream<T> stream, int batchSize, long[] nbItems)
+	{
+		var batch = HelpStream.batch(stream, batchSize, nbItems);
+
+		if (inhibitBatchStreamTime)
+			batch = HelpStream.clamp(batch, this::inhibitBatch_start, this::inhibitBatch_end);
+
+		return batch;
 	}
 
 	// ==========================================================================
@@ -284,9 +310,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries)
 	{
 		nbQueries = new long[] { 0 };
-		var batch = HelpStream.batch(queries, batchSize, nbQueries);
+		var batch = batchIt(queries.map(this::tree2Query), batchSize, nbQueries);
 
-		return batch.flatMap(this::execute);
+		return batch.flatMap(this::executeBson);
 	}
 
 	@Override
@@ -299,7 +325,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public Stream<Object> executeNatives(Stream<Object> nativeQueries)
 	{
 		nbQueries = new long[] { 0 };
-		var batch = HelpStream.batch(nativeQueries, batchSize, nbQueries);
+		var batch = batchIt(nativeQueries, batchSize, nbQueries);
 
 		return batch.flatMap(this::executeNative);
 	}

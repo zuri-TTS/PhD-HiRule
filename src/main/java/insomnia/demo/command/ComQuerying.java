@@ -150,8 +150,6 @@ final class ComQuerying implements ICommand
 		printer = outputFilePrinter("answers-unique");
 		allRecords.uniqueSet().forEach(printer::println);
 		printer.close();
-
-//		executeBatch(config, nonEmptyQueries.stream());
 	}
 
 	public void execute(Configuration config) throws Exception
@@ -171,10 +169,15 @@ final class ComQuerying implements ICommand
 
 	private void executeNative(Configuration config) throws Exception
 	{
+		var create = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
+
 		var qnatives   = Query.getNatives(config);
 		var dataAccess = DataAccesses.getDataAccess(config);
 
+		create.startChrono();
 		var resultStream = dataAccess.executeNatives(qnatives);
+		create.stopChrono();
+
 		executeBatch(config, dataAccess, resultStream);
 	}
 
@@ -185,8 +188,11 @@ final class ComQuerying implements ICommand
 
 	private void executeBatch(Configuration config, Stream<ITree<Object, KVLabel>> queries) throws Exception
 	{
-		var dataAccess   = DataAccesses.getDataAccess(config);
+		var create     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
+		var dataAccess = DataAccesses.getDataAccess(config);
+		create.startChrono();
 		var resultStream = dataAccess.execute(queries);
+		create.stopChrono();
 		executeBatch(config, dataAccess, resultStream);
 	}
 
@@ -194,9 +200,11 @@ final class ComQuerying implements ICommand
 	{
 		TheDemo.setMeasurePrefix("");
 
-		var         qeval      = TheDemo.measure("query.eval.total");
-		var         qstream    = TheDemo.measure("query.eval.stream");
-		var         qaction    = TheDemo.measure("query.eval.stream.action");
+		var qeval      = TheDemo.measure(TheDemo.TheMeasures.QEVAL_TOTAL);
+		var strmTotal  = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL);
+		var strmNext   = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
+		var strmAction = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_ACTION);
+
 		Bag<String> allRecords = new HashBag<>();
 
 		{
@@ -210,26 +218,29 @@ final class ComQuerying implements ICommand
 				: r -> {
 				};
 
-			CPUTimeBenchmark.startChrono(qeval, qstream);
+			CPUTimeBenchmark.startChrono(qeval, strmNext, strmTotal);
 			{
 				resultStream.forEach(r -> {
-					qstream.stopChrono();
-					qaction.startChrono();
+					strmNext.stopChrono();
+					strmAction.startChrono();
 					var id = dataAccess.getRecordId(r);
 					allRecords.add(id);
 					displayProcess.accept(id);
-					qaction.stopChrono();
-					qstream.startChrono();
+					strmAction.stopChrono();
+					strmNext.startChrono();
 				});
 			}
-			CPUTimeBenchmark.stopChrono(qeval, qstream);
+			CPUTimeBenchmark.stopChrono(qeval, strmNext, strmTotal);
+
+			var create = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
+			qeval.plus(create);
+			strmTotal.plus(create);
+
 			ans_out.close();
 		}
-		TheDemo.measure("query.eval.stream.action2", CPUTimeBenchmark.minus(qeval, qstream));
 		TheDemo.measure("answers", "total", allRecords.size());
 		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
 		TheDemo.measure("queries", "total", (int) dataAccess.getNbQueries());
-		qeval.plus(TheDemo.measure("query.eval.stream.create"));
 
 		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
 			ComConfig.print(config, outputFilePrinter("config"), true);
