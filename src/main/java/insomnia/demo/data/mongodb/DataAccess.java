@@ -89,10 +89,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		client     = MongoClients.create(connection);
 		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
 
-		queryBatchSize         = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getOpt(), 100);
-		dataBatchSize          = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getOpt(), 0);
-		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getOpt(), true);
-		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getOpt(), true);
+		queryBatchSize         = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getLongOpt(), 100);
+		dataBatchSize          = config.getInt(MyOptions.DATA_BATCHSIZE.opt.getLongOpt(), 0);
+		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getLongOpt(), true);
+		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getLongOpt(), true);
 
 		if (inhibitBatchStreamTime)
 			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);

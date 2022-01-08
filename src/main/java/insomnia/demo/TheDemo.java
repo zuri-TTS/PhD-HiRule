@@ -255,7 +255,7 @@ public final class TheDemo
 			var cli = new DefaultParser().parse(options, args);
 			// Load config files
 			{
-				var configOpt = TheOptions.OneOption.Config.getOption().getOpt();
+				var configOpt = TheOptions.OneOption.Config.getOption().getLongOpt();
 
 				if (cli.hasOption(configOpt))
 				{
@@ -274,7 +274,7 @@ public final class TheDemo
 			theCommand.execute(config);
 			mes.stopChrono();
 
-			var outMeasures = new PrintStream(InputData.getOutput(List.of(config.getString(MyOptions.OutputMeasures.opt.getOpt(), "std://out").split(","))), true);
+			var outMeasures = new PrintStream(InputData.getOutput(List.of(config.getString(MyOptions.OutputMeasures.opt.getLongOpt(), "std://out").split(","))), true);
 
 			measures.print(outMeasures);
 		}
