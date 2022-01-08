@@ -247,6 +247,7 @@ final class ComQuerying implements ICommand
 		TheDemo.measure("answers", "total", allRecords.size());
 		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
 		TheDemo.measure("queries", "total", (int) dataAccess.getNbQueries());
+		TheDemo.measure("queries", "batch.nb", (int) dataAccess.getNbBatches());
 
 		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
 			ComConfig.print(config, outputFilePrinter("config"), true);

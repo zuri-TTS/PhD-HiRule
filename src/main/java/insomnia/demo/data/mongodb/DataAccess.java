@@ -343,7 +343,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	@Override
 	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries)
 	{
-		nbQueries = new long[] { 0 };
+		nbQueries = new long[] { 0, 0 };
 		var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
 
 		return batch.flatMap(this::executeBson);
@@ -356,9 +356,15 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
+	public long getNbBatches()
+	{
+		return nbQueries[1];
+	}
+
+	@Override
 	public Stream<Object> executeNatives(Stream<Object> nativeQueries)
 	{
-		nbQueries = new long[] { 0 };
+		nbQueries = new long[] { 0, 0 };
 		var batch = batchIt(nativeQueries, queryBatchSize, nbQueries);
 
 		return batch.flatMap(this::executeNative);

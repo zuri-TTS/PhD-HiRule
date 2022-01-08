@@ -33,9 +33,12 @@ public interface IDataAccess<VAL, LBL>
 
 	long getNbQueries();
 
+	long getNbBatches();
+
 	void encodeNativeQuery(Object query, PrintStream printer);
 
 	Object decodeNativeQuery(String from);
 
 	void writeInfos(PrintWriter printer);
+
 }

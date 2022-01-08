@@ -72,6 +72,7 @@ public final class TheDemo
 		QEVAL_STREAM_ACTION("eval.stream.action"), //
 		QEVAL_STREAM_TOTAL("eval.stream.total"), //
 		QEVAL_STREAM_INHIB("eval.stream.inhibited"), //
+		QEVAL_BATCH_NB("eval.batch.nb"), //
 		//
 		QREWR_RULES_APPLY("rewriting.rules.apply"), //
 		QREWR_RULES_TOTAL("rewriting.total"), //
