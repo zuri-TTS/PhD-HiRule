@@ -100,10 +100,18 @@ final class ComQuerying implements ICommand
 	{
 		TheDemo.setMeasurePrefix("each");
 
-		var dataAccess   = DataAccesses.getDataAccess(config);
-		var resultStream = dataAccess.executeEach( //
-			ComGenerate.queries(config) //
-		);
+		var create     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
+		var dataAccess = DataAccesses.getDataAccess(config);
+		var queries    = ComGenerate.queries(config);
+
+		create.startChrono();
+		var resultStream = dataAccess.executeEach(queries);
+		create.stopChrono();
+
+		var qeval      = TheDemo.measure(TheDemo.TheMeasures.QEVAL_TOTAL);
+		var strmTotal  = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL);
+		var strmNext   = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
+		var strmAction = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_ACTION);
 
 		Bag<String> allRecords = new HashBag<>();
 
@@ -116,27 +124,39 @@ final class ComQuerying implements ICommand
 			var qnativeempty  = new PrintStream(outputFilePrinter("native-empty"));
 			var qnativenempty = new PrintStream(outputFilePrinter("native-non-empty"));
 
-			resultStream.forEach(p -> {
-				nbQueries[0]++;
-				var query   = p.getLeft();
-				var nativeQ = p.getMiddle();
-				var records = p.getRight().map(dataAccess::getRecordId).collect(Collectors.toList());
+			CPUTimeBenchmark.startChrono(qeval, strmNext, strmTotal);
+			{
+				resultStream.forEach(p -> {
+					strmNext.stopChrono();
+					strmAction.startChrono();
+					nbQueries[0]++;
+					var query   = p.getLeft();
+					var nativeQ = p.getMiddle();
+					var records = p.getRight().map(dataAccess::getRecordId).collect(Collectors.toList());
 
-				if (records.isEmpty())
-				{
-					nbEmpties[0]++;
-					dataAccess.encodeNativeQuery(nativeQ, qnativeempty);
-					qempty.println(query);
-				}
-				else
-				{
-					qout.printf("\n\n%s\n", query.toString());
-					records.forEach(qout::println);
-					allRecords.addAll(records);
-					dataAccess.encodeNativeQuery(nativeQ, qnativenempty);
-					qnempty.printf("%s\n%s\n\n", query, records.size());
-				}
-			});
+					if (records.isEmpty())
+					{
+						nbEmpties[0]++;
+						dataAccess.encodeNativeQuery(nativeQ, qnativeempty);
+						qempty.println(query);
+					}
+					else
+					{
+						qout.printf("\n\n%s\n", query.toString());
+						records.forEach(qout::println);
+						allRecords.addAll(records);
+						dataAccess.encodeNativeQuery(nativeQ, qnativenempty);
+						qnempty.printf("%s\n%s\n\n", query, records.size());
+					}
+					strmAction.stopChrono();
+					strmNext.startChrono();
+				});
+			}
+			CPUTimeBenchmark.stopChrono(qeval, strmNext, strmTotal);
+
+			qeval.plus(create);
+			strmTotal.plus(create);
+
 			qout.close();
 			qnempty.close();
 			qnativenempty.close();
@@ -156,6 +176,9 @@ final class ComQuerying implements ICommand
 		printer = outputFilePrinter("answers-unique");
 		allRecords.uniqueSet().forEach(printer::println);
 		printer.close();
+
+		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
+			ComConfig.print(config, outputFilePrinter("config"), true);
 	}
 
 	public void execute(Configuration config) throws Exception
