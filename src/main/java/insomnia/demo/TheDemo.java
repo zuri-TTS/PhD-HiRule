@@ -10,7 +10,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Option;
@@ -25,7 +24,6 @@ import insomnia.demo.help.URLStreamHandlers;
 import insomnia.demo.input.InputData;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpFunctions;
-import insomnia.lib.memoization.Memoizers;
 import insomnia.lib.net.StdUrlStreamHandler;
 
 public final class TheDemo
@@ -102,18 +100,6 @@ public final class TheDemo
 			ret.put(m.getName(), measure(m.getName()));
 
 		return Map.copyOf(ret);
-	}
-
-	private static Supplier<Map<String, CPUTimeBenchmark>> streamMeasures = Memoizers.lazy(() -> TheDemo.getMeasures( //
-		TheMeasures.QEVAL_STREAM_CREATE, //
-		TheMeasures.QEVAL_STREAM_NEXT, //
-		TheMeasures.QEVAL_STREAM_ACTION, //
-		TheMeasures.QEVAL_STREAM_TOTAL //
-	));
-
-	public static Map<String, CPUTimeBenchmark> getStreamMeasures()
-	{
-		return streamMeasures.get();
 	}
 
 	// ==========================================================================
