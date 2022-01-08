@@ -25,7 +25,8 @@ final class ComSummarize implements ICommand
 {
 	private enum MyOptions
 	{
-		SummaryType(Option.builder().longOpt("summary.type").desc("key|path").build()) //
+		SummaryType(Option.builder().longOpt("summary.type").desc("key|path").build()), //
+		PrettyPrint(Option.builder().longOpt("summary.prettyPrint").build()), //
 		;
 
 		Option opt;
@@ -89,7 +90,7 @@ final class ComSummarize implements ICommand
 				summary = PathSummary.create();
 				encoder = (s, w) -> {
 					new PathSummaryWriter<Object, KVLabel>().setLabelEncoder(KVLabels::encodeTo) //
-						.setPrettyPrint(true) //
+						.setPrettyPrint(config.getBoolean(MyOptions.PrettyPrint.opt.getLongOpt(), false)) //
 						.writeTo((PathSummary<Object, KVLabel>) s, w);
 				};
 				break;
