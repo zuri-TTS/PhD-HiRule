@@ -77,6 +77,8 @@ public final class TheDemo
 		QREWR_RULES_TOTAL("rewriting.total"), //
 		//
 		QUERY_TO_NATIVE("eval.query2native"), //
+		//
+		SUMMARY_CREATE("summary.create"), //
 		;
 
 		private String name;

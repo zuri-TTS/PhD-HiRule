@@ -15,6 +15,7 @@ import org.apache.commons.configuration2.Configuration;
 import insomnia.data.ITree;
 import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
+import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.input.InputData;
 import insomnia.demo.input.Query;
 import insomnia.demo.input.Rules;
@@ -103,8 +104,13 @@ final class ComGenerate implements ICommand
 
 	public static Stream<ITree<Object, KVLabel>> queries(Configuration config) throws IOException, ParseException
 	{
+		var summaryCreate = TheDemo.measure(TheMeasures.SUMMARY_CREATE);
+
 		var reformulations = getReformulations(config);
-		var summary        = Summary.get(config);
+
+		summaryCreate.startChrono();
+		var summary = Summary.get(config);
+		summaryCreate.stopChrono();
 
 		Stream<ITree<Object, KVLabel>> st;
 
