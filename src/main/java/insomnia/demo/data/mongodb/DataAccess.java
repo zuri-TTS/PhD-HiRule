@@ -3,7 +3,6 @@ package insomnia.demo.data.mongodb;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Stream;
@@ -14,6 +13,7 @@ import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.tuple.Triple;
 import org.bson.BsonArray;
 import org.bson.BsonBoolean;
+import org.bson.BsonDocument;
 import org.bson.BsonDouble;
 import org.bson.BsonInt32;
 import org.bson.BsonString;
@@ -50,6 +50,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		DATA_BATCHSIZE(Option.builder().longOpt("data.batchSize").desc("(int) How many records MongoDB must batch").build()), //
 		LEAF_CHECKTERMINAL(Option.builder().longOpt("leaf.checkTerminal").desc("(bool) If true, the native MongoDB query will have constraints to check if a terminal node in the query is a terminal node in the result").build()), //
 		INHIBIT_BATCH_STREAM_TIME(Option.builder().longOpt("inhibitBatchStreamTime").desc("(bool) If true, does it best to not count the time passed in the result stream to construct batches of reformulations").build()), //
+		Q2NATIVE_DOTS(Option.builder().longOpt("toNative.dots").desc("(bool) If true, simplify simple paths using the dot notation").build()), //
 		;
 
 		Option opt;
@@ -83,6 +84,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private boolean inhibitBatchStreamTime;
 
+	private boolean q2NativeDots;
+
 	private CPUTimeBenchmark inhibitTime;
 
 	private DataAccess(URI uri, Configuration config)
@@ -96,6 +99,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		dataBatchSize          = config.getInt(MyOptions.DATA_BATCHSIZE.opt.getLongOpt(), 0);
 		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getLongOpt(), true);
 		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getLongOpt(), true);
+		q2NativeDots           = config.getBoolean(MyOptions.Q2NATIVE_DOTS.opt.getLongOpt(), false);
 
 		if (inhibitBatchStreamTime)
 			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);
@@ -180,78 +184,91 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	private Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
 		q2native.startChrono();
-		var filter = tree2Query(tree, tree.getRoot());
+		BsonDocument filter = new BsonDocument();
+		tree2Query(filter, tree, tree.getRoot());
 		q2native.stopChrono();
 		return filter;
 	}
 
-	private Bson tree2Query( //
-		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node //
+	private boolean isInt(double val)
+	{
+		return val == Math.ceil(val);
+	}
+
+	private void tree2Query(BsonDocument document, ITree<Object, KVLabel> tree, INode<Object, KVLabel> node)
+	{
+		var childs = tree.getChildren(node);
+
+		for (var c : childs)
+			tree2Query(document, new StringBuilder(c.getLabel().asString()), tree, c.getChild());
+	}
+
+	private void tree2Query( //
+		BsonDocument document, StringBuilder labelBuilder, ITree<Object, KVLabel> tree, INode<Object, KVLabel> node //
 	)
 	{
-		if (0 == tree.nbChildren(node))
+		var childs   = tree.getChildren(node);
+		var nbChilds = childs.size();
+
+		if (0 == nbChilds)
 		{
-			var parent = tree.getParent(node);
+			BsonValue bsonValue;
+			var       value = node.getValue();
 
-			if (parent.isEmpty())
-				return Filters.empty();
+			if (value == null || KVValues.interpretation().isAny(value))
+			{
+				if (node.isTerminal() && checkTerminalLeaf)
+				{
+					bsonValue = new BsonDocument() //
+						.append("$exists", BsonBoolean.TRUE) //
+						.append("$not", new BsonDocument("$type", new BsonArray( //
+							List.of(new BsonInt32(BsonType.ARRAY.getValue()), new BsonInt32(BsonType.DOCUMENT.getValue())) //
+						)) //
+						);
+				}
+				else
+					bsonValue = new BsonDocument("$exists", BsonBoolean.TRUE);
+			}
+			else if (value instanceof String)
+				bsonValue = new BsonString((String) value);
+			else if (value instanceof Number)
+			{
+				var d = ((Number) value).doubleValue();
 
-			return null;
+				if (isInt(d))
+					bsonValue = new BsonInt32((int) d);
+				else
+					bsonValue = new BsonDouble(d);
+			}
+			else
+				throw new IllegalArgumentException(String.format("Can't handle value '%s'", value));
+
+			var label = labelBuilder.toString();
+			document.append(label, bsonValue);
+		}
+		else if (q2NativeDots && nbChilds == 1)
+		{
+			while (nbChilds == 1)
+			{
+				var c = childs.get(0);
+				labelBuilder.append('.').append(c.getLabel().asString());
+				node     = c.getChild();
+				childs   = tree.getChildren(node);
+				nbChilds = childs.size();
+			}
+			tree2Query(document, labelBuilder, tree, node);
 		}
 		else
 		{
-			var childs = new ArrayList<Bson>(tree.nbChildren(node));
+			BsonDocument eMatch = new BsonDocument();
+			document.append(labelBuilder.toString(), new BsonDocument("$elemMatch", eMatch));
 
-			for (var c : tree.getChildren(node))
+			for (var c : childs)
 			{
-				var  label    = c.getLabel().asString();
-				var  value    = c.getChild().getValue();
-				var  subQuery = tree2Query(tree, c.getChild());
-				Bson filter;
-
-				// No childs
-				if (null == subQuery)
-				{
-					BsonValue bval;
-
-					if (value == null || KVValues.interpretation().isAny(value))
-					{
-						if (c.getChild().isTerminal() && checkTerminalLeaf)
-							filter = //
-								new Document().append(label,  //
-									new Document() //
-										.append("$exists", new BsonBoolean(true))//
-										.append("$not", new Document() //
-											.append("$type", new BsonArray(List.<BsonValue>of( //
-												new BsonInt32(BsonType.ARRAY.getValue()), //
-												new BsonInt32(BsonType.DOCUMENT.getValue() //
-												)))))) //
-							;
-						else
-							filter = Filters.exists(label);
-					}
-					else
-					{
-						if (value instanceof String)
-							bval = new BsonString((String) value);
-						else if (value instanceof Number)
-							bval = new BsonDouble(((Number) value).doubleValue());
-						else
-							throw new IllegalArgumentException(String.format("Can't handle value '%s'", value));
-
-						filter = Filters.eq(label, bval);
-					}
-				}
-				else
-					filter = Filters.elemMatch(label, subQuery);
-
-				childs.add(filter);
+				labelBuilder.setLength(0);
+				labelBuilder.append(c.getLabel().asString());
+				tree2Query(eMatch, labelBuilder, tree, c.getChild());
 			}
-
-			if (childs.size() == 1)
-				return childs.get(0);
-
-			return Filters.and(childs);
 		}
 	}
 
