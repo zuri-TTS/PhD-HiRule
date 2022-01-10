@@ -12,7 +12,10 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.tuple.Triple;
+import org.bson.BsonArray;
+import org.bson.BsonBoolean;
 import org.bson.BsonDouble;
+import org.bson.BsonInt32;
 import org.bson.BsonString;
 import org.bson.BsonType;
 import org.bson.BsonValue;
@@ -215,17 +218,14 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 					{
 						if (c.getChild().isTerminal() && checkTerminalLeaf)
 							filter = //
-								Filters.and( //
-									Filters.exists(label), //
-									Filters.not( //
-										Filters.elemMatch(label, //
-											Filters.or( //
-												Filters.type(label, BsonType.ARRAY), //
-												Filters.type(label, BsonType.DOCUMENT) //
-											) //
-										) //
-									)//
-								) //
+								new Document().append(label,  //
+									new Document() //
+										.append("$exists", new BsonBoolean(true))//
+										.append("$not", new Document() //
+											.append("$type", new BsonArray(List.<BsonValue>of( //
+												new BsonInt32(BsonType.ARRAY.getValue()), //
+												new BsonInt32(BsonType.DOCUMENT.getValue() //
+												)))))) //
 							;
 						else
 							filter = Filters.exists(label);
