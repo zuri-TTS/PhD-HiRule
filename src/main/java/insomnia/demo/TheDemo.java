@@ -74,6 +74,8 @@ public final class TheDemo
 		QEVAL_STREAM_INHIB("eval.stream.inhibited"), //
 		QEVAL_BATCH_NB("eval.batch.nb"), //
 		//
+		QEVAL_STATS_DB_TIME("stats.db.time"), //
+		//
 		QREWR_RULES_APPLY("rewriting.rules.apply"), //
 		QREWR_RULES_TOTAL("rewriting.total"), //
 		//

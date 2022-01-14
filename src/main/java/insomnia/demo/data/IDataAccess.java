@@ -8,6 +8,7 @@ import java.util.stream.Stream;
 import org.apache.commons.lang3.tuple.Triple;
 
 import insomnia.data.ITree;
+import insomnia.lib.cpu.CPUTimeBenchmark;
 
 public interface IDataAccess<VAL, LBL>
 {
@@ -17,7 +18,16 @@ public interface IDataAccess<VAL, LBL>
 		Function<Object, ITree<VAL, LBL>> transform(Function<Object, ITree<VAL, LBL>> function);
 	}
 
+	public static interface explainStats
+	{
+		long getNbAnswers();
+
+		CPUTimeBenchmark getTime();
+	}
+
 	Stream<ITree<VAL, LBL>> all();
+
+	Stream<Object> explain(Stream<ITree<VAL, LBL>> queries);
 
 	Stream<Object> execute(Stream<ITree<VAL, LBL>> queries);
 
@@ -30,6 +40,8 @@ public interface IDataAccess<VAL, LBL>
 	Object treeToQNative(ITree<VAL, LBL> query);
 
 	String getRecordId(Object record);
+
+	explainStats explainStats(Object record);
 
 	long getNbQueries();
 

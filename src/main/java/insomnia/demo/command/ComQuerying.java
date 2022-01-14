@@ -31,7 +31,7 @@ final class ComQuerying implements ICommand
 	private enum MyOptions
 	{
 		OutputPattern(Option.builder().longOpt("querying.output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
-		, QueryEach(Option.builder().longOpt("querying.each").desc("(bool) Results query by query").build()) //
+		, QueryMode(Option.builder().longOpt("querying.mode").desc("(query|explain|each) Query mode").build()) //
 		, DisplayAnswers(Option.builder().longOpt("querying.display.answers").desc("(bool) Display the answers").build()) //
 		, ConfigPrint(Option.builder().longOpt("querying.config.print").desc("(bool) Print the config in a file").build()) //
 		;
@@ -73,6 +73,16 @@ final class ComQuerying implements ICommand
 	}
 
 	// ==========================================================================
+
+	private enum QueryMode
+	{
+		EACH, QUERY, EXPLAIN;
+
+		static QueryMode fromString(String mode)
+		{
+			return QueryMode.valueOf(mode.toUpperCase());
+		}
+	}
 
 	private String outputPattern;
 
@@ -186,14 +196,22 @@ final class ComQuerying implements ICommand
 	{
 		outputPattern = config.getString(MyOptions.OutputPattern.opt.getLongOpt());
 
-		if (config.getBoolean(MyOptions.QueryEach.opt.getLongOpt(), false))
-			executeEach(config);
-		else
+		switch (QueryMode.fromString(config.getString(MyOptions.QueryMode.opt.getLongOpt())))
 		{
+		case EACH:
+			executeEach(config);
+			break;
+
+		case QUERY:
 			if (Query.isNative(config))
 				executeNative(config);
 			else
 				executeBatch(config);
+			break;
+
+		case EXPLAIN:
+			explainBatch(config);
+			break;
 		}
 	}
 
@@ -210,6 +228,44 @@ final class ComQuerying implements ICommand
 
 		executeBatch(config, dataAccess, resultStream);
 	}
+	// ==========================================================================
+
+	private void explainBatch(Configuration config) throws Exception
+	{
+		explainBatch(config, ComGenerate.queries(config));
+	}
+
+	private void explainBatch(Configuration config, Stream<ITree<Object, KVLabel>> queries) throws Exception
+	{
+		var create     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
+		var dataAccess = DataAccesses.getDataAccess(config);
+		create.startChrono();
+		var resultStream = dataAccess.explain(queries);
+		create.stopChrono();
+		explainBatch(config, dataAccess, resultStream);
+	}
+
+	private void explainBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream) throws Exception
+	{
+		var strmNext   = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
+		var strmAction = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_ACTION);
+		int nbAnsw[]   = { 0 };
+		var dbTime     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME);
+
+		executeBatch(config, dataAccess, resultStream, r -> {
+			strmNext.stopChrono();
+			strmAction.startChrono();
+			var stats = dataAccess.explainStats(r);
+			nbAnsw[0] += stats.getNbAnswers();
+			dbTime.plus(stats.getTime());
+			strmAction.stopChrono();
+			strmNext.startChrono();
+		}, () -> {
+			TheDemo.measure("answers", "total", nbAnsw[0]);
+		});
+	}
+
+	// ==========================================================================
 
 	private void executeBatch(Configuration config) throws Exception
 	{
@@ -257,6 +313,8 @@ final class ComQuerying implements ICommand
 			TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
 		});
 	}
+
+	// ==========================================================================
 
 	private void executeBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream, Consumer<Object> resultAction, ProcessFunction end) throws Exception
 	{

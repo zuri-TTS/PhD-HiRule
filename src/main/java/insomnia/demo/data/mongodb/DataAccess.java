@@ -3,7 +3,9 @@ package insomnia.demo.data.mongodb;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -23,6 +25,7 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 
 import com.mongodb.ConnectionString;
+import com.mongodb.ExplainVerbosity;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
@@ -40,6 +43,7 @@ import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.kv.data.KVValues;
 import insomnia.lib.cpu.CPUTimeBenchmark;
+import insomnia.lib.cpu.CPUTimeBenchmark.TIME;
 import insomnia.lib.help.HelpStream;
 
 public final class DataAccess implements IDataAccess<Object, KVLabel>
@@ -315,6 +319,14 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return executeBson((List<Bson>) queries);
 	}
 
+	private Stream<Object> explainBson(Iterable<Bson> queries)
+	{
+		var disjunction = Filters.or(queries);
+
+		var stats = collection.find(disjunction).explain(ExplainVerbosity.EXECUTION_STATS);
+		return Stream.of(stats);
+	}
+
 	private Stream<Object> executeBson(Iterable<Bson> queries)
 	{
 		var disjunction = Filters.or(queries);
@@ -327,6 +339,31 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return wrapDocumentCursor(cursor);
 	}
 
+	@Override
+	public insomnia.demo.data.IDataAccess.explainStats explainStats(Object record)
+	{
+		var doc       = ((Document) record);
+		var time      = doc.getEmbedded(List.of("executionStats"), Document.class).getInteger("executionTimeMillis");
+		var nbAnswers = doc.getEmbedded(List.of("executionStats"), Document.class).getInteger("nReturned");
+
+		var benchTime = new CPUTimeBenchmark();
+		benchTime.plus(Duration.ofMillis(time), EnumSet.of(TIME.REAL));
+
+		return new explainStats()
+		{
+			@Override
+			public CPUTimeBenchmark getTime()
+			{
+				return benchTime;
+			}
+
+			@Override
+			public long getNbAnswers()
+			{
+				return nbAnswers;
+			}
+		};
+	}
 	// ==========================================================================
 
 	private static Collection<CPUTimeBenchmark> streamMeasures = TheDemo.getMeasures(TheMeasures.QEVAL_STREAM_NEXT, TheMeasures.QEVAL_STREAM_TOTAL).values();
@@ -364,6 +401,15 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
 
 		return batch.flatMap(this::executeBson);
+	}
+
+	@Override
+	public Stream<Object> explain(Stream<ITree<Object, KVLabel>> queries)
+	{
+		nbQueries = new long[] { 0, 0 };
+		var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
+
+		return batch.flatMap(this::explainBson);
 	}
 
 	@Override
