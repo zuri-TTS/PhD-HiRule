@@ -24,6 +24,7 @@ import insomnia.demo.input.InputData;
 import insomnia.demo.input.Query;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
+import insomnia.lib.function.ProcessFunction;
 
 final class ComQuerying implements ICommand
 {
@@ -227,37 +228,48 @@ final class ComQuerying implements ICommand
 
 	private void executeBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream) throws Exception
 	{
-		TheDemo.setMeasurePrefix("");
-
-		var qeval      = TheDemo.measure(TheDemo.TheMeasures.QEVAL_TOTAL);
-		var strmTotal  = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL);
 		var strmNext   = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
 		var strmAction = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_ACTION);
 
+		var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
+		var ans_out        = new PrintStream( //
+			displayAnswers ? outputFilePrinter("answers") : PrintStream.nullOutputStream() //
+		);
+
+		Consumer<String> displayProcess = displayAnswers //
+			? r -> ans_out.println(r) //
+			: r -> {
+			};
+
 		Bag<String> allRecords = new HashBag<>();
 
+		executeBatch(config, dataAccess, resultStream, r -> {
+			strmNext.stopChrono();
+			strmAction.startChrono();
+			var id = dataAccess.getRecordId(r);
+			allRecords.add(id);
+			displayProcess.accept(id);
+			strmAction.stopChrono();
+			strmNext.startChrono();
+		}, () -> {
+			ans_out.close();
+			TheDemo.measure("answers", "total", allRecords.size());
+			TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
+		});
+	}
+
+	private void executeBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream, Consumer<Object> resultAction, ProcessFunction end) throws Exception
+	{
+		TheDemo.setMeasurePrefix("");
+
+		var qeval     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_TOTAL);
+		var strmTotal = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL);
+		var strmNext  = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
+
 		{
-			var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
-			var ans_out        = new PrintStream( //
-				displayAnswers ? outputFilePrinter("answers") : PrintStream.nullOutputStream() //
-			);
-
-			Consumer<String> displayProcess = displayAnswers //
-				? r -> ans_out.println(r) //
-				: r -> {
-				};
-
 			CPUTimeBenchmark.startChrono(qeval, strmNext, strmTotal);
 			{
-				resultStream.forEach(r -> {
-					strmNext.stopChrono();
-					strmAction.startChrono();
-					var id = dataAccess.getRecordId(r);
-					allRecords.add(id);
-					displayProcess.accept(id);
-					strmAction.stopChrono();
-					strmNext.startChrono();
-				});
+				resultStream.forEach(resultAction);
 			}
 			CPUTimeBenchmark.stopChrono(qeval, strmNext, strmTotal);
 
@@ -265,10 +277,8 @@ final class ComQuerying implements ICommand
 			qeval.plus(create);
 			strmTotal.plus(create);
 
-			ans_out.close();
+			end.process();
 		}
-		TheDemo.measure("answers", "total", allRecords.size());
-		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
 		TheDemo.measure("queries", "total", (int) dataAccess.getNbQueries());
 		TheDemo.measure("queries", "batch.nb", (int) dataAccess.getNbBatches());
 
