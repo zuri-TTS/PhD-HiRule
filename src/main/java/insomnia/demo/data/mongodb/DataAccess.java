@@ -1,12 +1,15 @@
 package insomnia.demo.data.mongodb;
 
+import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
+import java.text.ParseException;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
@@ -34,17 +37,21 @@ import com.mongodb.client.model.Filters;
 
 import insomnia.data.INode;
 import insomnia.data.ITree;
+import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
+import insomnia.demo.input.Summary;
 import insomnia.implem.data.Trees;
 import insomnia.implem.data.creational.TreeBuilder;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.kv.data.KVValues;
+import insomnia.implem.summary.LabelTypeSummary;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.cpu.CPUTimeBenchmark.TIME;
 import insomnia.lib.help.HelpStream;
+import insomnia.summary.ISummary.NodeType;
 
 public final class DataAccess implements IDataAccess<Object, KVLabel>
 {
@@ -55,6 +62,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		LEAF_CHECKTERMINAL(Option.builder().longOpt("leaf.checkTerminal").desc("(bool) If true, the native MongoDB query will have constraints to check if a terminal node in the query is a terminal node in the result").build()), //
 		INHIBIT_BATCH_STREAM_TIME(Option.builder().longOpt("inhibitBatchStreamTime").desc("(bool) If true, does it best to not count the time passed in the result stream to construct batches of reformulations").build()), //
 		Q2NATIVE_DOTS(Option.builder().longOpt("toNative.dots").desc("(bool) If true, simplify simple paths using the dot notation").build()), //
+		Q2NATIVE_USE_SUMMARY(Option.builder().longOpt("toNative.useSummary").desc("(bool) If true, use the key-type summary types to build the query and choose beetween dots notation or $elemMatch").build()), //
 		;
 
 		Option opt;
@@ -92,6 +100,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private CPUTimeBenchmark inhibitTime;
 
+	private Function<KVLabel, EnumSet<NodeType>> labelType;
+
 	private DataAccess(URI uri, Configuration config)
 	{
 		connection = new ConnectionString(uri.toString());
@@ -107,6 +117,36 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 		if (inhibitBatchStreamTime)
 			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);
+
+		if (config.getBoolean(MyOptions.Q2NATIVE_USE_SUMMARY.opt.getLongOpt(), false))
+		{
+			if (q2NativeDots)
+				throw new IllegalArgumentException(String.format("%s cannot be set with %s", //
+					MyOptions.Q2NATIVE_DOTS.opt.getLongOpt(), //
+					MyOptions.Q2NATIVE_USE_SUMMARY.opt.getLongOpt()//
+				));
+
+			try
+			{
+				var summary = Summary.get(config);
+
+				if (!(summary instanceof LabelTypeSummary<?, ?>))
+					throw new IllegalArgumentException(String.format("Can only use %s with key-type summary: %s given", //
+						MyOptions.Q2NATIVE_USE_SUMMARY.opt.getLongOpt(), //
+						config.getString(TheConfiguration.OneProperty.Summary.getPropertyName()) //
+					));
+				labelType = ((LabelTypeSummary<Object, KVLabel>) summary)::getNodeType;
+			}
+			catch (IOException | ParseException e)
+			{
+				throw new Error(e);
+			}
+		}
+		else
+		{
+			var type = EnumSet.of(NodeType.ARRAY);
+			labelType = l -> type;
+		}
 	}
 
 	// ==========================================================================
@@ -204,11 +244,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		var childs = tree.getChildren(node);
 
 		for (var c : childs)
-			tree2Query(document, new StringBuilder(c.getLabel().asString()), tree, c.getChild());
+			tree2Query(document, new StringBuilder(c.getLabel().asString()), tree, c.getChild(), labelType.apply(c.getLabel()));
 	}
 
 	private void tree2Query( //
-		BsonDocument document, StringBuilder labelBuilder, ITree<Object, KVLabel> tree, INode<Object, KVLabel> node //
+		BsonDocument document, StringBuilder labelBuilder, //
+		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node, //
+		EnumSet<NodeType> type //
 	)
 	{
 		var childs   = tree.getChildren(node);
@@ -252,26 +294,66 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		}
 		else if (q2NativeDots && nbChilds == 1)
 		{
+			KVLabel label = null;
+
 			while (nbChilds == 1)
 			{
 				var c = childs.get(0);
+				label = c.getLabel();
+				labelBuilder.append('.').append(label.asString());
+				node     = c.getChild();
+				childs   = tree.getChildren(node);
+				nbChilds = childs.size();
+			}
+			tree2Query(document, labelBuilder, tree, node, labelType.apply(label));
+		}
+		else if (nbChilds == 1 && !type.contains(NodeType.ARRAY))
+		{
+			EnumSet<NodeType> ltype = null;
+
+			while (nbChilds == 1)
+			{
+				var c     = childs.get(0);
+				var label = c.getLabel();
+				ltype = labelType.apply(label);
+
+				if (ltype.contains(NodeType.ARRAY))
+					break;
+
 				labelBuilder.append('.').append(c.getLabel().asString());
 				node     = c.getChild();
 				childs   = tree.getChildren(node);
 				nbChilds = childs.size();
 			}
-			tree2Query(document, labelBuilder, tree, node);
+			tree2Query(document, labelBuilder, tree, node, ltype);
 		}
 		else
 		{
-			BsonDocument eMatch = new BsonDocument();
-			document.append(labelBuilder.toString(), new BsonDocument("$elemMatch", eMatch));
+			int minLength;
+
+			if (type.containsAll(List.of(NodeType.ARRAY, NodeType.OBJECT)))
+				throw new Error(String.format("[mongodb] a label must have only one type: '%s' is %s", labelBuilder.toString(), type.toString()));
+
+			if (type.contains(NodeType.ARRAY))
+			{
+				BsonDocument eMatch = new BsonDocument();
+				document.append(labelBuilder.toString(), new BsonDocument("$elemMatch", eMatch));
+				document  = eMatch;
+				minLength = 0;
+			}
+			else
+			{
+				labelBuilder.append(".");
+				minLength = labelBuilder.length();
+			}
 
 			for (var c : childs)
 			{
-				labelBuilder.setLength(0);
-				labelBuilder.append(c.getLabel().asString());
-				tree2Query(eMatch, labelBuilder, tree, c.getChild());
+				var label = c.getLabel();
+
+				labelBuilder.setLength(minLength);
+				labelBuilder.append(label.asString());
+				tree2Query(document, labelBuilder, tree, c.getChild(), labelType.apply(label));
 			}
 		}
 	}
