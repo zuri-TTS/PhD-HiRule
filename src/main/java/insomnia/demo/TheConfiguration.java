@@ -37,6 +37,7 @@ public final class TheConfiguration
 		, QueryNative(Option.builder().longOpt("query.native").desc("Path to a file of native queries").build()) //
 		, Rules(Option.builder().longOpt("rules").desc("Path to a file of rules or a directory of files").build()) //
 		, Summary(Option.builder().longOpt("summary").desc("Path to the summary file, or empty if no summary").build()) //
+		, SummaryType(Option.builder().longOpt("summary.type").desc("Type of the summary file: key|key-type|path").build()) //
 		;
 
 		Option opt;
@@ -64,6 +65,7 @@ public final class TheConfiguration
 		, QueryNative(MyOptions.QueryNative.opt.getLongOpt()) //
 		, Rules(MyOptions.Rules.opt.getLongOpt()) //
 		, Summary(MyOptions.Summary.opt.getLongOpt()) //
+		, SummaryType(MyOptions.SummaryType.opt.getLongOpt()) //
 		;
 
 		String name;

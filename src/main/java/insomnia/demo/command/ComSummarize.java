@@ -10,6 +10,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.configuration2.Configuration;
 
+import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.data.DataAccesses;
 import insomnia.implem.kv.data.KVLabel;
@@ -27,7 +28,6 @@ final class ComSummarize implements ICommand
 {
 	private enum MyOptions
 	{
-		SummaryType(Option.builder().longOpt("summary.type").desc("key|key-type|path").build()), //
 		PrettyPrint(Option.builder().longOpt("summary.prettyPrint").build()), //
 		;
 
@@ -69,7 +69,7 @@ final class ComSummarize implements ICommand
 	@Override
 	public void execute(Configuration config)
 	{
-		var type = config.getString(MyOptions.SummaryType.opt.getLongOpt(), "key");
+		var type = config.getString(TheConfiguration.OneProperty.SummaryType.getPropertyName(), "key");
 
 		ISummary<Object, KVLabel> summary;
 
