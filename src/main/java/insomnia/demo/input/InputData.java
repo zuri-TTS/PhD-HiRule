@@ -37,7 +37,12 @@ public final class InputData
 	{
 		try
 		{
-			return Optional.of(new URI(HelpURI.encodeURI(uri)));
+			var theUri = new URI(HelpURI.encodeURI(uri));
+
+			if (theUri.getScheme() == null)
+				theUri = getURI("file://" + uri).get();
+
+			return Optional.of(theUri);
 		}
 		catch (URISyntaxException e)
 		{
