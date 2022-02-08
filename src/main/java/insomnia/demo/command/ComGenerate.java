@@ -1,7 +1,10 @@
 package insomnia.demo.command;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.file.OpenOption;
+import java.nio.file.Path;
 import java.text.ParseException;
 import java.util.Collection;
 import java.util.List;
@@ -16,6 +19,8 @@ import insomnia.data.ITree;
 import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
+import insomnia.demo.data.DataAccesses;
+import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.InputData;
 import insomnia.demo.input.Query;
 import insomnia.demo.input.Rules;
@@ -34,8 +39,7 @@ final class ComGenerate implements ICommand
 {
 	private enum MyOptions
 	{
-		Output(Option.builder().longOpt("generate.output").desc("Output URIs for display").build()) //
-		, DisplayRefs(Option.builder().longOpt("generate.display.refs").desc("(bool) Display the reformulations").build()) //
+		OutputPattern(Option.builder().longOpt("output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
 		;
 
 		Option opt;
@@ -68,6 +72,27 @@ final class ComGenerate implements ICommand
 	public String getDescription()
 	{
 		return "Generate all query reformulations";
+	}
+
+	private String outputPattern;
+
+	private String getFileName(String file)
+	{
+		if (TheDemo.measureHasPrefix())
+			return TheDemo.getMeasurePrefix() + "-" + file;
+
+		return file;
+	}
+
+	private PrintStream outputFilePrinter(String fileName, OpenOption... options)
+	{
+		if (outputPattern == null)
+			return new PrintStream(OutputStream.nullOutputStream());
+
+		fileName = getFileName(fileName);
+		var filePath = Path.of(String.format(outputPattern, fileName));
+
+		return new PrintStream(InputData.fakeOpenOutputPath(filePath, options));
 	}
 
 	// ==========================================================================
@@ -124,33 +149,31 @@ final class ComGenerate implements ICommand
 		return st;
 	}
 
-	private Consumer<ITree<Object, KVLabel>> generateAction(int[] nb, boolean displayRefs)
+	private Consumer<ITree<Object, KVLabel>> generateAction(IDataAccess<Object, KVLabel> access, int[] nb, PrintStream qout, PrintStream nout)
 	{
-		if (displayRefs)
-			return t -> {
-				out.println(t);
-				nb[0]++;
-			};
-		else
-			return t -> {
-				nb[0]++;
-			};
+		return t -> {
+			qout.println(t);
+			nout.println(access.treeToQNative(t));
+			nb[0]++;
+		};
 	}
 
 	// ==========================================================================
 
-	private PrintStream out;
-
 	public void execute(Configuration config) throws Exception
 	{
-		int nb[] = new int[] { 0 };
+		outputPattern = config.getString(MyOptions.OutputPattern.opt.getLongOpt());
+		int nb[]   = new int[] { 0 };
+		var access = DataAccesses.getDataAccess(config);
 
-		out = new PrintStream(InputData.getOutput(List.of(config.getString(MyOptions.Output.opt.getLongOpt()).split(","))), true);
 		{
 			var q = queries(config);
 
-			var displayRefs = config.getBoolean(MyOptions.DisplayRefs.opt.getLongOpt(), false);
-			q.forEach(generateAction(nb, displayRefs));
+			var queries = new PrintStream(outputFilePrinter("queries"));
+			var natives = new PrintStream(outputFilePrinter("natives"));
+
+			q.forEach(generateAction(access, nb, queries, natives));
+			queries.close();
 		}
 		TheDemo.measure("reformulations", "nb", nb[0]);
 	}
