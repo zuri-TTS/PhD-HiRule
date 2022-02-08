@@ -30,7 +30,7 @@ final class ComQuerying implements ICommand
 {
 	private enum MyOptions
 	{
-		OutputPattern(Option.builder().longOpt("querying.output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
+		OutputPattern(Option.builder().longOpt("output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
 		, QueryMode(Option.builder().longOpt("querying.mode").desc("(query|explain|each) Query mode").build()) //
 		, DisplayAnswers(Option.builder().longOpt("querying.display.answers").desc("(bool) Display the answers").build()) //
 		, ConfigPrint(Option.builder().longOpt("querying.config.print").desc("(bool) Print the config in a file").build()) //
