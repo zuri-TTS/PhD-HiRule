@@ -322,12 +322,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				var c     = childs.get(0);
 				var label = c.getLabel();
 				ltype = labelType.apply(label);
+				labelBuilder.append('.').append(c.getLabel().asString());
+				node = c.getChild();
 
 				if (ltype.contains(NodeType.ARRAY))
 					break;
 
-				labelBuilder.append('.').append(c.getLabel().asString());
-				node     = c.getChild();
 				childs   = tree.getChildren(node);
 				nbChilds = childs.size();
 			}
