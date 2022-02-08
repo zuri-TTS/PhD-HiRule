@@ -352,6 +352,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				labelBuilder.append(".");
 				minLength = labelBuilder.length();
 			}
+			labelBuilder = new StringBuilder(labelBuilder);
 
 			for (var c : childs)
 			{
@@ -359,7 +360,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 				labelBuilder.setLength(minLength);
 				labelBuilder.append(label.asString());
-				tree2Query(document, new StringBuilder(labelBuilder), tree, c.getChild(), labelType.apply(label));
+				tree2Query(document, labelBuilder, tree, c.getChild(), labelType.apply(label));
 			}
 		}
 	}
