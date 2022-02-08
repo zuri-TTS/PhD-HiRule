@@ -196,11 +196,17 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			var label = sb.getParent(sb.getCurrentNode()).get().getLabel();
 			sb.removeUp();
 
-			for (var val : doc.asArray().getValues())
+			var arr = doc.asArray();
+
+			for (var val : arr.getValues())
 			{
 				sb.addChildDown(label);
 				bson2Tree(sb, val);
 			}
+
+			// Force value to be an array in the tree
+			if (arr.size() == 1)
+				sb.addChild(label, "");
 		}
 		else if (doc.isString())
 		{
