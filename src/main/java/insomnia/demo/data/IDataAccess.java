@@ -8,6 +8,7 @@ import java.util.stream.Stream;
 import org.apache.commons.lang3.tuple.Triple;
 
 import insomnia.data.ITree;
+import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 
 public interface IDataAccess<VAL, LBL>
@@ -27,6 +28,8 @@ public interface IDataAccess<VAL, LBL>
 
 	Stream<ITree<VAL, LBL>> all();
 
+	boolean hasAnswer(ITree<Object, KVLabel> query);
+
 	Stream<Object> explain(Stream<ITree<VAL, LBL>> queries);
 
 	Stream<Object> execute(Stream<ITree<VAL, LBL>> queries);
@@ -42,6 +45,8 @@ public interface IDataAccess<VAL, LBL>
 	String getRecordId(Object record);
 
 	explainStats explainStats(Object record);
+
+	long getNbDocuments();
 
 	long getNbQueries();
 

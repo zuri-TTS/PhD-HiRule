@@ -76,7 +76,7 @@ final class ComQuerying implements ICommand
 
 	private enum QueryMode
 	{
-		EACH, QUERY, EXPLAIN;
+		EACH, STATS, QUERY, EXPLAIN;
 
 		static QueryMode fromString(String mode)
 		{
@@ -169,7 +169,9 @@ final class ComQuerying implements ICommand
 			strmTotal.plus(create);
 
 			qout.close();
+			qempty.close();
 			qnempty.close();
+			qnativeempty.close();
 			qnativenempty.close();
 		}
 		TheDemo.measure("reformulations", "empty", nbEmpties[0]);
@@ -192,6 +194,46 @@ final class ComQuerying implements ICommand
 			ComConfig.print(config, outputFilePrinter("config"), true);
 	}
 
+	private void stats(Configuration config) throws Exception
+	{
+		var dataAccess = DataAccesses.getDataAccess(config);
+		var queries    = ComGenerate.queries(config);
+
+		int nbQueries[] = new int[1];
+		int nbEmpties[] = new int[1];
+		{
+			var qnativeempty  = new PrintStream(outputFilePrinter("native-empty"));
+			var qnativenempty = new PrintStream(outputFilePrinter("native-non-empty"));
+			{
+				queries.forEach(q -> {
+					PrintStream printer;
+
+					boolean hasAnswer = dataAccess.hasAnswer(q);
+
+					if (hasAnswer)
+						printer = qnativenempty;
+					else
+					{
+						printer = qnativeempty;
+						nbEmpties[0]++;
+					}
+
+					dataAccess.encodeNativeQuery(dataAccess.treeToQNative(q), printer);
+					nbQueries[0]++;
+				});
+			}
+			qnativeempty.close();
+			qnativenempty.close();
+		}
+		TheDemo.measure("stats", "documents.nb", (int) dataAccess.getNbDocuments());
+		TheDemo.measure("stats", "queries.nb", nbQueries[0]);
+		TheDemo.measure("stats", "queries.empty.nb", nbEmpties[0]);
+		TheDemo.measure("stats", "queries.nonempty.nb", nbQueries[0] - nbEmpties[0]);
+
+		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
+			ComConfig.print(config, outputFilePrinter("config"), true);
+	}
+
 	public void execute(Configuration config) throws Exception
 	{
 		outputPattern = config.getString(MyOptions.OutputPattern.opt.getLongOpt());
@@ -201,14 +243,15 @@ final class ComQuerying implements ICommand
 		case EACH:
 			executeEach(config);
 			break;
-
+		case STATS:
+			stats(config);
+			break;
 		case QUERY:
 			if (Query.isNative(config))
 				executeNative(config);
 			else
 				executeBatch(config);
 			break;
-
 		case EXPLAIN:
 			explainBatch(config);
 			break;

@@ -366,6 +366,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
+	public long getNbDocuments()
+	{
+		return collection.estimatedDocumentCount();
+	}
+
+	@Override
 	public Stream<ITree<Object, KVLabel>> all()
 	{
 		return HelpStream.toStream(collection.find()) //
@@ -400,6 +406,14 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			var cursor = collection.find(bsonq);
 			return Triple.of(q, bsonq, wrapDocumentCursor(cursor));
 		});
+	}
+
+	@Override
+	public boolean hasAnswer(ITree<Object, KVLabel> query)
+	{
+		var bsonq  = tree2Query(query);
+		var cursor = collection.find(bsonq).limit(1);
+		return null != cursor.first();
 	}
 
 	@SuppressWarnings("unchecked")
