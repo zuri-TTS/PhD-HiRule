@@ -3,9 +3,9 @@ package insomnia.demo.command;
 import java.io.PrintStream;
 
 import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.configuration2.ConfigurationUtils;
 
 import insomnia.demo.TheDemo;
-import insomnia.lib.help.HelpStream;
 
 final class ComConfig implements ICommand
 {
@@ -23,9 +23,7 @@ final class ComConfig implements ICommand
 
 	public static void print(Configuration config, PrintStream printer, boolean closePrinter)
 	{
-		HelpStream.toStream(config.getKeys()) //
-			.sorted() //
-			.forEach(k -> printer.printf("%s: %s\n", k, config.get(Object.class, k)));
+		ConfigurationUtils.dump(config, printer);
 
 		if (closePrinter)
 			printer.close();
