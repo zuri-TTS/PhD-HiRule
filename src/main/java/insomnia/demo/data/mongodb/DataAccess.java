@@ -21,6 +21,7 @@ import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonDouble;
 import org.bson.BsonInt32;
+import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.BsonType;
 import org.bson.BsonValue;
@@ -253,6 +254,31 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			tree2Query(document, new StringBuilder(c.getLabel().asString()), tree, c.getChild(), labelType.apply(c.getLabel()));
 	}
 
+	private static boolean isExists_op(BsonValue val)
+	{
+		if (!(val instanceof BsonDocument))
+			return false;
+		var doc = val.asDocument();
+
+		return doc.size() == 1 && doc.get("$exists", BsonNull.VALUE).equals(BsonBoolean.TRUE);
+	}
+
+	private static boolean isAll_op(BsonValue val)
+	{
+		if (!(val instanceof BsonDocument))
+			return false;
+		var doc = val.asDocument();
+
+		return doc.size() == 1 && doc.get("$all", BsonNull.VALUE) instanceof BsonArray;
+	}
+
+	private static boolean isScalar(BsonValue val)
+	{
+		return val instanceof BsonString //
+			|| val instanceof BsonInt32 //
+			|| val instanceof BsonDouble;
+	}
+
 	private void tree2Query( //
 		BsonDocument document, StringBuilder labelBuilder, //
 		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node, //
@@ -295,8 +321,36 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			else
 				throw new IllegalArgumentException(String.format("Can't handle value '%s'", value));
 
-			var label = labelBuilder.toString();
-			document.append(label, bsonValue);
+			var label    = labelBuilder.toString();
+			var existing = document.get(label);
+
+			if (null != existing)
+			{
+				var e = isExists_op(existing);
+				var b = isExists_op(bsonValue);
+
+				if (b)
+					;
+				else if (e)
+					document.append(label, bsonValue);
+				else
+				{
+					boolean isAll_op = isAll_op(existing);
+
+					if (!(isAll_op || isScalar(existing)) || !isScalar(bsonValue))
+						throw new IllegalArgumentException(String.format("Label '%s' already set (=%s), wanna add %s", label, existing.toString(), bsonValue.toString()));
+
+					if (isAll_op)
+						existing.asDocument().get("$all").asArray().add(bsonValue);
+					else
+					{
+						bsonValue = new BsonDocument("$all", new BsonArray(List.of(existing, bsonValue)));
+						document.append(label, bsonValue);
+					}
+				}
+			}
+			else
+				document.append(label, bsonValue);
 		}
 		else if (q2NativeDots && nbChilds == 1)
 		{
