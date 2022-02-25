@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
@@ -38,17 +37,20 @@ import com.mongodb.client.model.Filters;
 
 import insomnia.data.INode;
 import insomnia.data.ITree;
-import insomnia.demo.TheConfiguration;
+import insomnia.data.ITreeNavigator;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.Summary;
+import insomnia.implem.data.TreeTypeNavigators;
 import insomnia.implem.data.Trees;
 import insomnia.implem.data.creational.TreeBuilder;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.kv.data.KVValues;
+import insomnia.implem.summary.ILabelSummary;
 import insomnia.implem.summary.LabelTypeSummary;
+import insomnia.implem.summary.PathSummary;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.cpu.CPUTimeBenchmark.TIME;
 import insomnia.lib.help.HelpStream;
@@ -63,7 +65,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		LEAF_CHECKTERMINAL(Option.builder().longOpt("leaf.checkTerminal").desc("(bool) If true, the native MongoDB query will have constraints to check if a terminal node in the query is a terminal node in the result").build()), //
 		INHIBIT_BATCH_STREAM_TIME(Option.builder().longOpt("inhibitBatchStreamTime").desc("(bool) If true, does it best to not count the time passed in the result stream to construct batches of reformulations").build()), //
 		Q2NATIVE_DOTS(Option.builder().longOpt("toNative.dots").desc("(bool) If true, simplify simple paths using the dot notation").build()), //
-		Q2NATIVE_USE_SUMMARY(Option.builder().longOpt("toNative.useSummary").desc("(bool) If true, use the key-type summary types to build the query and choose beetween dots notation or $elemMatch").build()), //
+		Q2NATIVE_SUMMARY(Option.builder().longOpt("toNative.summary").desc("(str) Path to the summary to use for the query2native traduction").build()), //
+		Q2NATIVE_SUMMARY_TYPE(Option.builder().longOpt("toNative.summary.type").desc("(str) key-type|path").build()), //
 		;
 
 		Option opt;
@@ -101,7 +104,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private CPUTimeBenchmark inhibitTime;
 
-	private Function<KVLabel, EnumSet<NodeType>> labelType;
+	private ITreeNavigator<EnumSet<NodeType>, KVLabel> summaryNavigator;
 
 	private DataAccess(URI uri, Configuration config)
 	{
@@ -119,24 +122,29 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		if (inhibitBatchStreamTime)
 			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);
 
-		if (config.getBoolean(MyOptions.Q2NATIVE_USE_SUMMARY.opt.getLongOpt(), false))
+		var summaryUrl = config.getString(MyOptions.Q2NATIVE_SUMMARY.opt.getLongOpt(), "");
+
+		if (!summaryUrl.isEmpty())
 		{
 			if (q2NativeDots)
 				throw new IllegalArgumentException(String.format("%s cannot be set with %s", //
 					MyOptions.Q2NATIVE_DOTS.opt.getLongOpt(), //
-					MyOptions.Q2NATIVE_USE_SUMMARY.opt.getLongOpt()//
+					MyOptions.Q2NATIVE_SUMMARY.opt.getLongOpt()//
 				));
 
 			try
 			{
-				var summary = Summary.get(config);
+				var stype   = config.getString(MyOptions.Q2NATIVE_SUMMARY_TYPE.opt.getLongOpt());
+				var summary = Summary.get(summaryUrl, Summary.parseType(stype));
 
-				if (!(summary instanceof LabelTypeSummary<?, ?>))
-					throw new IllegalArgumentException(String.format("Can only use %s with key-type summary: %s given", //
-						MyOptions.Q2NATIVE_USE_SUMMARY.opt.getLongOpt(), //
-						config.getString(TheConfiguration.OneProperty.Summary.getPropertyName()) //
-					));
-				labelType = ((LabelTypeSummary<Object, KVLabel>) summary)::getNodeType;
+				if (summary instanceof PathSummary<?, ?>)
+					summaryNavigator = TreeTypeNavigators.from((PathSummary<Object, KVLabel>) summary, true);
+				else if (summary instanceof LabelTypeSummary<?, ?>)
+					summaryNavigator = TreeTypeNavigators.constant((LabelTypeSummary<Object, KVLabel>) summary, true);
+				else if (summary instanceof ILabelSummary<?, ?>)
+					summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.ARRAY));
+				else
+					throw new IllegalArgumentException(String.format("[mongodb] Can't handle the summary: %s", summary));
 			}
 			catch (IOException | ParseException e)
 			{
@@ -144,10 +152,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			}
 		}
 		else
-		{
-			var type = EnumSet.of(NodeType.ARRAY);
-			labelType = l -> type;
-		}
+			summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.ARRAY));
 	}
 
 	// ==========================================================================
@@ -251,7 +256,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		var childs = tree.getChildren(node);
 
 		for (var c : childs)
-			tree2Query(document, new StringBuilder(c.getLabel().asString()), tree, c.getChild(), labelType.apply(c.getLabel()));
+		{
+			var label = c.getLabel();
+			summaryNavigator.goToRoot().followFirstPath(List.of(label));
+			tree2Query(document, new StringBuilder(label.asString()), tree, c.getChild(), summaryNavigator.getCurrentNode().getValue());
+		}
 	}
 
 	private static boolean isExists_op(BsonValue val)
@@ -360,12 +369,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			{
 				var c = childs.get(0);
 				label = c.getLabel();
+				summaryNavigator.followFirstPath(List.of(label));
 				labelBuilder.append('.').append(label.asString());
 				node     = c.getChild();
 				childs   = tree.getChildren(node);
 				nbChilds = childs.size();
 			}
-			tree2Query(document, labelBuilder, tree, node, labelType.apply(label));
+			tree2Query(document, labelBuilder, tree, node, summaryNavigator.getCurrentNode().getValue());
 		}
 		else if (nbChilds == 1 && !type.contains(NodeType.ARRAY))
 		{
@@ -375,7 +385,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			{
 				var c     = childs.get(0);
 				var label = c.getLabel();
-				ltype = labelType.apply(label);
+				summaryNavigator.followFirstPath(List.of(label));
+				ltype = summaryNavigator.getCurrentNode().getValue();
 				labelBuilder.append('.').append(c.getLabel().asString());
 				node = c.getChild();
 
@@ -407,14 +418,17 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				minLength = labelBuilder.length();
 			}
 			labelBuilder = new StringBuilder(labelBuilder);
+			var currentPos = summaryNavigator.getCurrentNode();
 
 			for (var c : childs)
 			{
+				summaryNavigator.setCurrentNode(currentPos);
 				var label = c.getLabel();
+				summaryNavigator.followFirstPath(List.of(label));
 
 				labelBuilder.setLength(minLength);
 				labelBuilder.append(label.asString());
-				tree2Query(document, labelBuilder, tree, c.getChild(), labelType.apply(label));
+				tree2Query(document, labelBuilder, tree, c.getChild(), summaryNavigator.getCurrentNode().getValue());
 			}
 		}
 	}

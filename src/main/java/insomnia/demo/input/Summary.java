@@ -30,10 +30,10 @@ public final class Summary
 		throw new AssertionError();
 	}
 
-	public static ISummary<Object, KVLabel> get(Configuration config) throws IOException, ParseException
+	public static Type parseType(String stype)
 	{
 		Type type;
-		switch (config.getString("summary.type"))
+		switch (stype.toLowerCase())
 		{
 		case "path":
 			type = Type.PATH;
@@ -45,12 +45,22 @@ public final class Summary
 			type = Type.KEY;
 			break;
 		default:
-			throw new IllegalArgumentException(String.format("Invalid summary.type: %s", config.getString("summary.type")));
+			throw new IllegalArgumentException(String.format("Invalid summary.type: %s", stype));
 		}
-		return get(config.getString(TheConfiguration.OneProperty.Summary.getPropertyName()), type);
+		return type;
 	}
 
-	private static ISummary<Object, KVLabel> get(String uri, Type type) throws IOException, ParseException
+	public static ISummary<Object, KVLabel> get(Configuration config) throws IOException, ParseException
+	{
+		var uri = config.getString(TheConfiguration.OneProperty.Summary.getPropertyName());
+
+		if (uri.isEmpty())
+			return LabelSummary.create();
+
+		return get(uri, parseType(config.getString("summary.type")));
+	}
+
+	public static ISummary<Object, KVLabel> get(String uri, Type type) throws IOException, ParseException
 	{
 		if (uri.isEmpty())
 			return LabelSummary.create();
