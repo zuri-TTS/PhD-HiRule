@@ -104,6 +104,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private CPUTimeBenchmark inhibitTime;
 
+	private String summaryUrl, summaryType;
+
 	private ITreeNavigator<EnumSet<NodeType>, KVLabel> summaryNavigator;
 
 	private DataAccess(URI uri, Configuration config)
@@ -122,8 +124,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		if (inhibitBatchStreamTime)
 			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);
 
-		var summaryUrl = config.getString(MyOptions.Q2NATIVE_SUMMARY.opt.getLongOpt(), "");
+		summaryUrl       = config.getString(MyOptions.Q2NATIVE_SUMMARY.opt.getLongOpt(), "");
+		summaryType      = config.getString(MyOptions.Q2NATIVE_SUMMARY_TYPE.opt.getLongOpt());
+		summaryNavigator = null;
+	}
 
+	private void needSummary()
+	{
 		if (!summaryUrl.isEmpty())
 		{
 			if (q2NativeDots)
@@ -134,8 +141,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 			try
 			{
-				var stype   = config.getString(MyOptions.Q2NATIVE_SUMMARY_TYPE.opt.getLongOpt());
-				var summary = Summary.get(summaryUrl, Summary.parseType(stype));
+				var summary = Summary.get(summaryUrl, Summary.parseType(summaryType));
 
 				if (summary instanceof PathSummary<?, ?>)
 					summaryNavigator = TreeTypeNavigators.from((PathSummary<Object, KVLabel>) summary, true);
@@ -155,6 +161,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.ARRAY));
 	}
 
+	private ITreeNavigator<EnumSet<NodeType>, KVLabel> getSummaryNavigator()
+	{
+		if (null == summaryNavigator)
+			needSummary();
+
+		return summaryNavigator;
+	}
 	// ==========================================================================
 
 	public static IDataAccess<Object, KVLabel> open(URI uri, Configuration config)
@@ -253,7 +266,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private void tree2Query(BsonDocument document, ITree<Object, KVLabel> tree, INode<Object, KVLabel> node)
 	{
-		var childs = tree.getChildren(node);
+		var summaryNavigator = getSummaryNavigator();
+		var childs           = tree.getChildren(node);
 
 		for (var c : childs)
 		{
@@ -294,8 +308,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		EnumSet<NodeType> type //
 	)
 	{
-		var childs   = tree.getChildren(node);
-		var nbChilds = childs.size();
+		var summaryNavigator = getSummaryNavigator();
+		var childs           = tree.getChildren(node);
+		var nbChilds         = childs.size();
 
 		if (0 == nbChilds)
 		{
