@@ -33,6 +33,7 @@ import insomnia.implem.fsa.fta.creational.BUFTABuilder;
 import insomnia.implem.kv.KV;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
+import insomnia.lib.help.HelpStream;
 import insomnia.rule.IRule;
 
 final class ComGenerate implements ICommand
@@ -146,7 +147,8 @@ final class ComGenerate implements ICommand
 			summary.consider(reformulations);
 			st = summary.generateTrees();
 		}
-		return st;
+		var rewritingsGen = TheDemo.measure(TheMeasures.QREWR_GENERATION);
+		return HelpStream.clamp(st, rewritingsGen::startChrono, rewritingsGen::stopChrono);
 	}
 
 	private Consumer<ITree<Object, KVLabel>> generateAction(IDataAccess<Object, KVLabel> access, int[] nb, PrintStream qout, PrintStream nout)

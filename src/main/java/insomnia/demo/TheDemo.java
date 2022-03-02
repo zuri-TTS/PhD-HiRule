@@ -79,6 +79,8 @@ public final class TheDemo
 		QREWR_RULES_APPLY("rewriting.rules.apply"), //
 		QREWR_RULES_TOTAL("rewriting.total"), //
 		//
+		QREWR_GENERATION("rewritings.generation"), //
+		//
 		QUERY_TO_NATIVE("eval.query2native"), //
 		//
 		SUMMARY_CREATE("summary.create"), //
