@@ -6,6 +6,7 @@ import java.io.PrintWriter;
 import java.net.URI;
 import java.text.ParseException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
@@ -13,6 +14,10 @@ import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
+import org.apache.commons.collections4.Bag;
+import org.apache.commons.collections4.MultiValuedMap;
+import org.apache.commons.collections4.bag.HashBag;
+import org.apache.commons.collections4.multimap.HashSetValuedHashMap;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.tuple.Triple;
 import org.bson.BsonArray;
@@ -20,7 +25,6 @@ import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonDouble;
 import org.bson.BsonInt32;
-import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.BsonType;
 import org.bson.BsonValue;
@@ -120,6 +124,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getLongOpt(), true);
 		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getLongOpt(), true);
 		q2NativeDots           = config.getBoolean(MyOptions.Q2NATIVE_DOTS.opt.getLongOpt(), false);
+
+		if (q2NativeDots)
+			throw new UnsupportedOperationException("'q2NativeDots' functionnality is disabled");
 
 		if (inhibitBatchStreamTime)
 			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);
@@ -253,8 +260,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	private Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
 		q2native.startChrono();
-		BsonDocument filter = new BsonDocument();
-		tree2Query(filter, tree, tree.getRoot());
+		BsonDocument filter = tree2Query(tree, tree.getRoot());
 		q2native.stopChrono();
 		return filter;
 	}
@@ -264,188 +270,262 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return val == Math.ceil(val);
 	}
 
-	private void tree2Query(BsonDocument document, ITree<Object, KVLabel> tree, INode<Object, KVLabel> node)
+	private BsonDocument tree2Query(ITree<Object, KVLabel> tree, INode<Object, KVLabel> node)
 	{
-		var summaryNavigator = getSummaryNavigator();
-		var childs           = tree.getChildren(node);
-
-		for (var c : childs)
-		{
-			var label = c.getLabel();
-			summaryNavigator.goToRoot().followFirstPath(List.of(label));
-			tree2Query(document, new StringBuilder(label.asString()), tree, c.getChild(), summaryNavigator.getCurrentNode().getValue());
-		}
+		return tree2Query(tree, node, EnumSet.of(NodeType.OBJECT));
 	}
 
 	private static boolean isExists_op(BsonValue val)
 	{
-		if (!(val instanceof BsonDocument))
-			return false;
-		var doc = val.asDocument();
-
-		return doc.size() == 1 && doc.get("$exists", BsonNull.VALUE).equals(BsonBoolean.TRUE);
+		return doc_exists.equals(val) || doc_texists.equals(val);
 	}
 
-	private static boolean isAll_op(BsonValue val)
+	private static BsonDocument bsonEmptyDocument = new BsonDocument();
+
+	private static BsonDocument combineExpr(BsonDocument a, BsonDocument b)
 	{
-		if (!(val instanceof BsonDocument))
-			return false;
-		var doc = val.asDocument();
+		if (bsonEmptyDocument.equals(a) || bsonEmptyDocument.equals(b))
+			return bsonEmptyDocument;
+		if (isExists_op(a))
+			return b;
+		if (isExists_op(b))
+			return a;
 
-		return doc.size() == 1 && doc.get("$all", BsonNull.VALUE) instanceof BsonArray;
+		var     eqa   = a.get("$eq");
+		var     eqb   = b.get("$eq");
+		boolean isEqa = null != eqa;
+		boolean isEqb = null != eqb;
+
+		if (isEqa && isEqb)
+			return new BsonDocument("$all", new BsonArray(List.of(eqa, eqb)));
+
+		// Let a be the non-scalar value
+		if (isEqa)
+		{
+			var tmp2 = a;
+			a = b;
+			b = tmp2;
+		}
+
+		if (!a.isDocument())
+			return bsonEmptyDocument;
+
+		var adoc = a.asDocument();
+		var all  = adoc.get("$all");
+
+		if (null != all)
+		{
+			var array = all.asArray().clone();
+			array.add(eqb);
+			return new BsonDocument("$all", array);
+		}
+		return bsonEmptyDocument;
 	}
 
-	private static boolean isScalar(BsonValue val)
-	{
-		return val instanceof BsonString //
-			|| val instanceof BsonInt32 //
-			|| val instanceof BsonDouble;
-	}
+	private static BsonDocument doc_exists = new BsonDocument("$exists", BsonBoolean.TRUE);
 
-	private void tree2Query( //
-		BsonDocument document, StringBuilder labelBuilder, //
-		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node, //
-		EnumSet<NodeType> type //
-	)
+	private static BsonDocument leafBadType = new BsonDocument("$type", new BsonArray( //
+		List.of(new BsonInt32(BsonType.ARRAY.getValue()), new BsonInt32(BsonType.DOCUMENT.getValue())) //
+	));
+
+	private static BsonDocument doc_texists = new BsonDocument() //
+		.append("$exists", BsonBoolean.TRUE) //
+		.append("$not", leafBadType);
+
+	private BsonDocument tree2Query( //
+		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node, EnumSet<NodeType> type)
 	{
 		var summaryNavigator = getSummaryNavigator();
 		var childs           = tree.getChildren(node);
 		var nbChilds         = childs.size();
 
 		if (0 == nbChilds)
+			return documentFromNodeValue(node, type);
+		else
 		{
-			BsonValue bsonValue;
-			var       value = node.getValue();
+			if (type.containsAll(List.of(NodeType.ARRAY, NodeType.OBJECT)))
+				throw new Error(String.format("[mongodb] a label must have only one type: have %s", type.toString()));
 
-			if (value == null || KVValues.interpretation().isAny(value))
+			List<BsonDocument> bsonChilds = new ArrayList<>();
+			Bag<String>        keyBag     = new HashBag<>();
+
+			var currentPos = summaryNavigator.getCurrentNode();
+
 			{
-				if (node.isTerminal() && checkTerminalLeaf)
-				{
-					bsonValue = new BsonDocument() //
-						.append("$exists", BsonBoolean.TRUE) //
-						.append("$not", new BsonDocument("$type", new BsonArray( //
-							List.of(new BsonInt32(BsonType.ARRAY.getValue()), new BsonInt32(BsonType.DOCUMENT.getValue())) //
-						)) //
-						);
-				}
-				else
-					bsonValue = new BsonDocument("$exists", BsonBoolean.TRUE);
+				var value = node.getValue();
+
+				if (value != null && !KVValues.interpretation().isAny(value))
+					throw new Error(String.format("Intermediary node has a value: %s", value));
 			}
-			else if (value instanceof String)
-				bsonValue = new BsonString((String) value);
-			else if (value instanceof Number)
+			for (var c : childs)
 			{
-				var d = ((Number) value).doubleValue();
+				var label       = c.getLabel();
+				var labelPrefix = label.asString() + ".";
 
-				if (isInt(d))
-					bsonValue = new BsonInt32((int) d);
-				else
-					bsonValue = new BsonDouble(d);
+				summaryNavigator.setCurrentNode(currentPos);
+				summaryNavigator.followFirstPath(List.of(label));
+				var doc = tree2Query(tree, c.getChild(), summaryNavigator.getCurrentNode().getValue());
+				{
+					var res = objectMergeChilds(doc, labelPrefix);
+					doc = (null != res) ? res : new BsonDocument(label.asString(), doc);
+				}
+				if (doc.isDocument())
+					keyBag.addAll(doc.keySet());
+
+				bsonChilds.add(doc);
+			}
+			BsonDocument ret;
+
+			if (keyBag.stream().anyMatch(k -> keyBag.getCount(k) > 1))
+			{
+				ret = deduplicateChilds(bsonChilds, keyBag);
+
+				if (null == ret)
+					ret = makeAnd(bsonChilds);
 			}
 			else
-				throw new IllegalArgumentException(String.format("Can't handle value '%s'", value));
-
-			var label    = labelBuilder.toString();
-			var existing = document.get(label);
-
-			if (null != existing)
 			{
-				var e = isExists_op(existing);
-				var b = isExists_op(bsonValue);
+				ret = new BsonDocument();
 
-				if (b)
-					;
-				else if (e)
-					document.append(label, bsonValue);
+				for (var d : bsonChilds)
+					for (var k : d.keySet())
+						ret.append(k, simplifyEq(d.get(k)));
+			}
+
+			if (type.contains(NodeType.ARRAY))
+				ret = new BsonDocument("$elemMatch", ret);
+
+			return ret;
+		}
+	}
+
+	private static BsonValue simplifyOne(BsonValue doc, String key)
+	{
+		if (!doc.isDocument())
+			return doc;
+
+		var eqv = doc.asDocument().get(key);
+		return null == eqv ? doc : eqv;
+	}
+
+	private static BsonValue simplifyEq(BsonValue doc)
+	{
+		return simplifyOne(doc, "$eq");
+	}
+
+	private BsonDocument documentFromNodeValue(INode<Object, KVLabel> node, EnumSet<NodeType> type)
+	{
+		var value = node.getValue();
+
+		if (value == null || KVValues.interpretation().isAny(value))
+		{
+			if (node.isTerminal() && checkTerminalLeaf)
+			{
+				if (type.contains(NodeType.ARRAY))
+					return new BsonDocument("$elemMatch", new BsonDocument("$not", leafBadType));
 				else
-				{
-					boolean isAll_op = isAll_op(existing);
-
-					if (!(isAll_op || isScalar(existing)) || !isScalar(bsonValue))
-						throw new IllegalArgumentException(String.format("Label '%s' already set (=%s), wanna add %s", label, existing.toString(), bsonValue.toString()));
-
-					if (isAll_op)
-						existing.asDocument().get("$all").asArray().add(bsonValue);
-					else
-					{
-						bsonValue = new BsonDocument("$all", new BsonArray(List.of(existing, bsonValue)));
-						document.append(label, bsonValue);
-					}
-				}
+					return doc_texists;
 			}
 			else
-				document.append(label, bsonValue);
+				return doc_exists;
 		}
-		else if (q2NativeDots && nbChilds == 1)
-		{
-			KVLabel label = null;
+		BsonValue bsonValue;
 
-			while (nbChilds == 1)
-			{
-				var c = childs.get(0);
-				label = c.getLabel();
-				summaryNavigator.followFirstPath(List.of(label));
-				labelBuilder.append('.').append(label.asString());
-				node     = c.getChild();
-				childs   = tree.getChildren(node);
-				nbChilds = childs.size();
-			}
-			tree2Query(document, labelBuilder, tree, node, summaryNavigator.getCurrentNode().getValue());
+		if (value instanceof String)
+			bsonValue = new BsonString((String) value);
+		else if (value instanceof Number)
+		{
+			var d = ((Number) value).doubleValue();
+
+			if (isInt(d))
+				bsonValue = new BsonInt32((int) d);
+			else
+				bsonValue = new BsonDouble(d);
+
 		}
-		else if (nbChilds == 1 && !type.contains(NodeType.ARRAY))
+		else
+			throw new IllegalArgumentException(String.format("Can't handle value '%s'", value));
+
+		return new BsonDocument("$eq", bsonValue);
+	}
+
+	private static BsonDocument objectMergeChilds(BsonDocument childDoc, String labelPrefix)
+	{
+		var res = new BsonDocument();
+		var and = childDoc.get("$and");
+
+		// Get up a $and element
+		if (null != and)
 		{
-			EnumSet<NodeType> ltype = null;
+			var array = new BsonArray();
 
-			while (nbChilds == 1)
+			for (var obj : and.asArray())
 			{
-				var c     = childs.get(0);
-				var label = c.getLabel();
-				summaryNavigator.followFirstPath(List.of(label));
-				ltype = summaryNavigator.getCurrentNode().getValue();
-				labelBuilder.append('.').append(c.getLabel().asString());
-				node = c.getChild();
-
-				if (ltype.contains(NodeType.ARRAY))
-					break;
-
-				childs   = tree.getChildren(node);
-				nbChilds = childs.size();
+				var doc = obj.asDocument();
+				var k   = doc.getFirstKey();
+				array.add(new BsonDocument(labelPrefix + k, doc.get(k)));
 			}
-			tree2Query(document, labelBuilder, tree, node, ltype);
+			return new BsonDocument("$and", array);
 		}
 		else
 		{
-			int minLength;
-
-			if (type.containsAll(List.of(NodeType.ARRAY, NodeType.OBJECT)))
-				throw new Error(String.format("[mongodb] a label must have only one type: '%s' is %s", labelBuilder.toString(), type.toString()));
-
-			if (type.contains(NodeType.ARRAY))
+			for (var k : childDoc.keySet())
 			{
-				BsonDocument eMatch = new BsonDocument();
-				document.append(labelBuilder.toString(), new BsonDocument("$elemMatch", eMatch));
-				document  = eMatch;
-				minLength = 0;
-			}
-			else
-			{
-				labelBuilder.append(".");
-				minLength = labelBuilder.length();
-			}
-			labelBuilder = new StringBuilder(labelBuilder);
-			var currentPos = summaryNavigator.getCurrentNode();
+				if (k.startsWith("$"))
+					return null;
 
-			for (var c : childs)
-			{
-				summaryNavigator.setCurrentNode(currentPos);
-				var label = c.getLabel();
-				summaryNavigator.followFirstPath(List.of(label));
-
-				labelBuilder.setLength(minLength);
-				labelBuilder.append(label.asString());
-				tree2Query(document, labelBuilder, tree, c.getChild(), summaryNavigator.getCurrentNode().getValue());
+				res.append(labelPrefix + k, childDoc.get(k));
 			}
 		}
+		return res;
+	}
+
+	private static BsonDocument makeAnd(List<BsonDocument> docs)
+	{
+		var array = new BsonArray();
+
+		// simplify $eq
+		for (var doc : docs)
+		{
+			if (doc.size() == 1)
+			{
+				var k = doc.getFirstKey();
+				array.add(new BsonDocument(k, simplifyEq(doc.get(k))));
+			}
+			else
+				array.add(doc);
+		}
+		return new BsonDocument("$and", array);
+	}
+
+	private static BsonDocument deduplicateChilds(List<BsonDocument> bsonChilds, Bag<String> keyBag)
+	{
+		var res = new BsonDocument();
+
+		MultiValuedMap<String, BsonDocument> duplicates = new HashSetValuedHashMap<>();
+
+		for (var doc : bsonChilds)
+		{
+			for (var k : doc.keySet())
+			{
+				if (keyBag.getCount(k) == 1)
+					res.append(k, simplifyEq(doc.get(k)));
+				else
+					duplicates.put(k, doc.getDocument(k));
+			}
+		}
+
+		for (var dup : duplicates.asMap().entrySet())
+		{
+			var key   = dup.getKey();
+			var dedup = dup.getValue().stream().reduce(DataAccess::combineExpr);
+
+			if (dedup.get().equals(bsonEmptyDocument))
+				return null;
+
+			res.append(key, dedup.get());
+		}
+		return res;
 	}
 
 	@Override
