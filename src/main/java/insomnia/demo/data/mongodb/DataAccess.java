@@ -116,7 +116,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
 
 		queryBatchSize         = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getLongOpt(), 100);
-		dataBatchSize          = config.getInt(MyOptions.DATA_BATCHSIZE.opt.getLongOpt(), 0);
+		dataBatchSize          = config.getInt(MyOptions.DATA_BATCHSIZE.opt.getLongOpt(), 100);
 		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getLongOpt(), true);
 		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getLongOpt(), true);
 		q2NativeDots           = config.getBoolean(MyOptions.Q2NATIVE_DOTS.opt.getLongOpt(), false);
@@ -457,7 +457,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	@Override
 	public Stream<ITree<Object, KVLabel>> all()
 	{
-		return HelpStream.toStream(collection.find()) //
+		var cursor = collection.find();
+
+		if (dataBatchSize > 0)
+			cursor.batchSize(dataBatchSize);
+
+		return HelpStream.toStream(cursor) //
 			.map(DataAccess::doc2Tree);
 	}
 
