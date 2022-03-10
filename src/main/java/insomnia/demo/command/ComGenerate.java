@@ -8,11 +8,11 @@ import java.nio.file.Path;
 import java.text.ParseException;
 import java.util.Collection;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
+import org.apache.commons.collections4.multimap.ArrayListValuedHashMap;
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
@@ -20,7 +20,6 @@ import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.DataAccesses;
-import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.InputData;
 import insomnia.demo.input.Query;
 import insomnia.demo.input.Rules;
@@ -151,33 +150,45 @@ final class ComGenerate implements ICommand
 		return HelpStream.clamp(st, rewritingsGen::startChrono, rewritingsGen::stopChrono);
 	}
 
-	private Consumer<ITree<Object, KVLabel>> generateAction(IDataAccess<Object, KVLabel> access, int[] nb, PrintStream qout, PrintStream nout)
-	{
-		return t -> {
-			qout.println(t);
-			nout.println(access.treeToQNative(t));
-			nb[0]++;
-		};
-	}
-
 	// ==========================================================================
 
 	public void execute(Configuration config) throws Exception
 	{
 		outputPattern = config.getString(MyOptions.OutputPattern.opt.getLongOpt());
-		int nb[]   = new int[] { 0 };
-		var access = DataAccesses.getDataAccess(config);
+		int nb[]     = new int[] { 0 };
+		var access   = DataAccesses.getDataAccess(config);
+		var queryDup = new ArrayListValuedHashMap<Object, Object>();
 
 		{
 			var q = queries(config);
 
 			var queries = new PrintStream(outputFilePrinter("queries"));
 			var natives = new PrintStream(outputFilePrinter("natives"));
+			var dup     = new PrintStream(outputFilePrinter("uniques"));
 
-			q.forEach(generateAction(access, nb, queries, natives));
+			q.forEach(t -> {
+				var qnative = access.treeToQNative(t);
+				queries.println(t);
+				natives.println(qnative);
+
+				t = Trees.create(t);
+				queryDup.put(t, qnative);
+
+				nb[0]++;
+			});
 			queries.close();
+
+			int i = 1;
+
+			for (var e : queryDup.asMap().entrySet())
+			{
+				dup.print(String.format("## %s\n", i++));
+				e.getValue().forEach(dup::println);
+				dup.println();
+			}
 		}
 		TheDemo.measure("reformulations", "nb", nb[0]);
+		TheDemo.measure("reformulations", "unique", queryDup.asMap().size());
 	}
 
 }
