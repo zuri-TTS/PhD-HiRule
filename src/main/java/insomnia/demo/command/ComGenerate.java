@@ -40,6 +40,8 @@ final class ComGenerate implements ICommand
 	private enum MyOptions
 	{
 		OutputPattern(Option.builder().longOpt("output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
+		, Deduplicate(Option.builder().longOpt("rewritings.deduplicate").desc("Deduplicate the rewritings").build()) //
+
 		;
 
 		Option opt;
@@ -155,16 +157,19 @@ final class ComGenerate implements ICommand
 	public void execute(Configuration config) throws Exception
 	{
 		outputPattern = config.getString(MyOptions.OutputPattern.opt.getLongOpt());
-		int nb[]     = new int[] { 0 };
-		var access   = DataAccesses.getDataAccess(config);
-		var queryDup = new ArrayListValuedHashMap<Object, Object>();
+		var deduplicate = config.getBoolean(MyOptions.Deduplicate.opt.getLongOpt(), false);
 
+		int nb[]   = new int[] { 0 };
+		var access = DataAccesses.getDataAccess(config);
+
+		var q = queries(config);
+
+		var queries = new PrintStream(outputFilePrinter("queries"));
+		var natives = new PrintStream(outputFilePrinter("natives"));
+
+		if (deduplicate)
 		{
-			var q = queries(config);
-
-			var queries = new PrintStream(outputFilePrinter("queries"));
-			var natives = new PrintStream(outputFilePrinter("natives"));
-			var dup     = new PrintStream(outputFilePrinter("uniques"));
+			var queryDup = new ArrayListValuedHashMap<Object, Object>();
 
 			q.forEach(t -> {
 				var qnative = access.treeToQNative(t);
@@ -176,7 +181,8 @@ final class ComGenerate implements ICommand
 
 				nb[0]++;
 			});
-			queries.close();
+
+			var dup = new PrintStream(outputFilePrinter("uniques"));
 
 			int i = 1;
 
@@ -186,9 +192,19 @@ final class ComGenerate implements ICommand
 				e.getValue().forEach(dup::println);
 				dup.println();
 			}
+			dup.close();
+			TheDemo.measure("reformulations", "unique", queryDup.asMap().size());
 		}
+		else
+		{
+			q.forEach(t -> {
+				queries.println(t);
+				natives.println(access.treeToQNative(t));
+				nb[0]++;
+			});
+		}
+		queries.close();
+		natives.close();
 		TheDemo.measure("reformulations", "nb", nb[0]);
-		TheDemo.measure("reformulations", "unique", queryDup.asMap().size());
 	}
-
 }
