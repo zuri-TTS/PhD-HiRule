@@ -155,7 +155,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				else if (summary instanceof LabelTypeSummary<?, ?>)
 					summaryNavigator = TreeTypeNavigators.constant((LabelTypeSummary<Object, KVLabel>) summary, true);
 				else if (summary instanceof ILabelSummary<?, ?>)
-					summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.ARRAY));
+					summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.MULTIPLE));
 				else
 					throw new IllegalArgumentException(String.format("[mongodb] Can't handle the summary: %s", summary));
 			}
@@ -165,7 +165,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			}
 		}
 		else
-			summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.ARRAY));
+			summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.MULTIPLE));
 	}
 
 	private ITreeNavigator<EnumSet<NodeType>, KVLabel> getSummaryNavigator()
@@ -343,8 +343,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			return documentFromNodeValue(node, type);
 		else
 		{
-			if (type.containsAll(List.of(NodeType.ARRAY, NodeType.OBJECT)))
-				throw new Error(String.format("[mongodb] a label must have only one type: have %s", type.toString()));
+			if (!type.contains(NodeType.OBJECT))
+				throw new IllegalArgumentException(String.format("[mongodb]The subtree\n%s cannot exists according to the summary\noriginal tree:\n%s", Trees.subTree(tree, node), tree));
 
 			List<BsonDocument> bsonChilds = new ArrayList<>();
 			Bag<String>        keyBag     = new HashBag<>();
@@ -376,6 +376,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			}
 			BsonDocument ret;
 
+			// Has some childs with the same label
 			if (keyBag.stream().anyMatch(k -> keyBag.getCount(k) > 1))
 			{
 				ret = deduplicateChilds(bsonChilds, keyBag);
@@ -392,7 +393,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 						ret.append(k, simplifyEq(d.get(k)));
 			}
 
-			if (type.contains(NodeType.ARRAY))
+			if (type.contains(NodeType.MULTIPLE))
 				ret = new BsonDocument("$elemMatch", ret);
 
 			return ret;
@@ -421,7 +422,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		{
 			if (node.isTerminal() && checkTerminalLeaf)
 			{
-				if (type.contains(NodeType.ARRAY))
+				if (type.contains(NodeType.MULTIPLE))
 					return new BsonDocument("$elemMatch", new BsonDocument("$not", leafBadType));
 				else
 					return doc_texists;
