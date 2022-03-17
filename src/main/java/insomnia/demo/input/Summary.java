@@ -57,10 +57,10 @@ public final class Summary
 		if (uri.isEmpty())
 			return LabelSummary.create();
 
-		return get(uri, parseType(config.getString("summary.type")));
+		return get(uri, parseType(config.getString("summary.type")), config.getBoolean(TheConfiguration.OneProperty.SummaryFilterLeaf.getPropertyName(), true));
 	}
 
-	public static ISummary<Object, KVLabel> get(String uri, Type type) throws IOException, ParseException
+	public static ISummary<Object, KVLabel> get(String uri, Type type, boolean filterLeaf) throws IOException, ParseException
 	{
 		if (uri.isEmpty())
 			return LabelSummary.create();
@@ -76,6 +76,7 @@ public final class Summary
 		{
 			var s = PathSummary.<Object, KVLabel>create();
 			s.addTree(KV.treeFromString(Files.readString(optPath.get())));
+			s.setFilterLeaf(filterLeaf);
 			return s;
 		}
 		case KEY:
@@ -86,7 +87,7 @@ public final class Summary
 		case KEY_TYPE:
 		{
 			var data = InputData.filters(InputData.getLinesOf(optPath.get()), Filters.NO_BLANK);
-			return new LabelTypeSummaryReader<Object, KVLabel>().setReadLabel(IDecoder.from(KVLabels::parseIllegal)).read(data.iterator());
+			return (new LabelTypeSummaryReader<Object, KVLabel>().setReadLabel(IDecoder.from(KVLabels::parseIllegal)).read(data.iterator())).setFilterLeaf(filterLeaf);
 		}
 		default:
 			throw new AssertionError();

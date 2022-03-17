@@ -148,7 +148,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 			try
 			{
-				var summary = Summary.get(summaryUrl, Summary.parseType(summaryType));
+				var summary = Summary.get(summaryUrl, Summary.parseType(summaryType), false);
 
 				if (summary instanceof PathSummary<?, ?>)
 					summaryNavigator = TreeTypeNavigators.from((PathSummary<Object, KVLabel>) summary, true);
