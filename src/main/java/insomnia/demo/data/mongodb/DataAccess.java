@@ -268,6 +268,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private BsonDocument tree2Query(ITree<Object, KVLabel> tree, INode<Object, KVLabel> node)
 	{
+		getSummaryNavigator().goToRoot();
 		return tree2Query(tree, node, EnumSet.of(NodeType.OBJECT));
 	}
 
