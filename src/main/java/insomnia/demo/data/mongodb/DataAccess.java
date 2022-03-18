@@ -340,8 +340,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			return documentFromNodeValue(node, type);
 		else
 		{
-			if (!type.contains(NodeType.OBJECT))
-				throw new IllegalArgumentException(String.format("[mongodb]The subtree\n%s cannot exists according to the summary\noriginal tree:\n%s", Trees.subTree(tree, node), tree));
 
 			List<BsonDocument> bsonChilds = new ArrayList<>();
 			Bag<String>        keyBag     = new HashBag<>();
