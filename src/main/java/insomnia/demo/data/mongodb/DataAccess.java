@@ -279,7 +279,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private static BsonDocument bsonEmptyDocument = new BsonDocument();
 
-	private static BsonDocument combineExpr(BsonDocument a, BsonDocument b)
+	private static BsonDocument combineExpr(String key, BsonDocument a, BsonDocument b)
 	{
 		if (bsonEmptyDocument.equals(a) || bsonEmptyDocument.equals(b))
 			return bsonEmptyDocument;
@@ -287,6 +287,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			return b;
 		if (isExists_op(b))
 			return a;
+
+		// Do not merge a path key
+		if (key.contains("."))
+			return bsonEmptyDocument;
 
 		var     eqa   = a.get("$eq");
 		var     eqb   = b.get("$eq");
@@ -340,7 +344,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			return documentFromNodeValue(node, type);
 		else
 		{
-
 			List<BsonDocument> bsonChilds = new ArrayList<>();
 			Bag<String>        keyBag     = new HashBag<>();
 
@@ -437,7 +440,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				bsonValue = new BsonInt32((int) d);
 			else
 				bsonValue = new BsonDouble(d);
-
 		}
 		else
 			throw new IllegalArgumentException(String.format("Can't handle value '%s'", value));
@@ -514,7 +516,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		for (var dup : duplicates.asMap().entrySet())
 		{
 			var key   = dup.getKey();
-			var dedup = dup.getValue().stream().reduce(DataAccess::combineExpr);
+			var dedup = dup.getValue().stream().reduce((a, b) -> combineExpr(key, a, b));
 
 			if (dedup.get().equals(bsonEmptyDocument))
 				return null;
