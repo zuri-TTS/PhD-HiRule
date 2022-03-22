@@ -388,7 +388,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 				for (var d : bsonChilds)
 					for (var k : d.keySet())
-						ret.append(k, simplifyEq(d.get(k)));
+						ret.append(k, d.get(k));
 			}
 
 			if (type.contains(NodeType.MULTIPLE))
@@ -488,7 +488,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			if (doc.size() == 1)
 			{
 				var k = doc.getFirstKey();
-				array.add(new BsonDocument(k, simplifyEq(doc.get(k))));
+				array.add(new BsonDocument(k, doc.get(k)));
 			}
 			else
 				array.add(doc);
