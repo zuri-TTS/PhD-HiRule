@@ -38,7 +38,7 @@ public final class TheConfiguration
 		, Rules(Option.builder().longOpt("rules").desc("Path to a file of rules or a directory of files").build()) //
 		, Summary(Option.builder().longOpt("summary").desc("Path to the summary file, or empty if no summary").build()) //
 		, SummaryType(Option.builder().longOpt("summary.type").desc("Type of the summary file: key|key-type|path").build()) //
-		, SummaryFilterLeaf(Option.builder().longOpt("summary.filter.leaf").desc("Do not generate a tree that has a non leaf node that must be a leaf according to the summary").build()) //
+		, SummaryFilterTypes(Option.builder().longOpt("summary.filter.types").desc("Use the 'NodeTypes' informations from the summary to filter more reformulations").build()) //
 		;
 
 		Option opt;
@@ -67,7 +67,7 @@ public final class TheConfiguration
 		, Rules(MyOptions.Rules.opt.getLongOpt()) //
 		, Summary(MyOptions.Summary.opt.getLongOpt()) //
 		, SummaryType(MyOptions.SummaryType.opt.getLongOpt()) //
-		, SummaryFilterLeaf(MyOptions.SummaryFilterLeaf.opt.getLongOpt()) //
+		, SummaryFilterTypes(MyOptions.SummaryFilterTypes.opt.getLongOpt()) //
 		;
 
 		String name;
