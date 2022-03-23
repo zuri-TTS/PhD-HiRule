@@ -391,7 +391,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 						ret.append(k, d.get(k));
 			}
 
-			if (type.contains(NodeType.MULTIPLE))
+			if (NodeType.isMultiple(type))
 				ret = new BsonDocument("$elemMatch", ret);
 
 			return ret;
@@ -420,7 +420,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		{
 			if (node.isTerminal() && checkTerminalLeaf)
 			{
-				if (type.contains(NodeType.MULTIPLE))
+				if (NodeType.isMultiple(type))
 					return new BsonDocument("$elemMatch", new BsonDocument("$not", leafBadType));
 				else
 					return doc_texists;
