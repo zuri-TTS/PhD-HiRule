@@ -185,6 +185,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	private static ITree<Object, KVLabel> doc2Tree(Document doc)
 	{
 		var tb = new TreeBuilder<Object, KVLabel>();
+		tb.setRooted();
 		bson2Tree(tb, doc.toBsonDocument());
 		return Trees.create(tb);
 	}
@@ -232,19 +233,19 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		}
 		else if (doc.isString())
 		{
-			sb.setValue(doc.asString().getValue());
+			sb.setValue(doc.asString().getValue()).setTerminal();
 			sb.goUp();
 		}
 		else if (doc.isNumber())
 		{
-			sb.setValue(Double.valueOf(doc.asNumber().doubleValue()));
+			sb.setValue(Double.valueOf(doc.asNumber().doubleValue())).setTerminal();
 			sb.goUp();
 		}
 		else if (doc.isNull())
-			sb.goUp();
+			sb.setTerminal().goUp();
 		else if (doc.isObjectId())
 		{
-			sb.setValue(doc.asObjectId().getValue().toString());
+			sb.setValue(doc.asObjectId().getValue().toString()).setTerminal();
 			sb.goUp();
 		}
 		else
