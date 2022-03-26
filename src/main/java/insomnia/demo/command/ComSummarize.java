@@ -106,7 +106,7 @@ final class ComSummarize implements ICommand
 			default:
 				throw new IllegalArgumentException(String.format("Invalid summary type: %s", type));
 			}
-			var dataAccess = DataAccesses.getDataAccess(config);
+			var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
 			var summaryP   = config.getString("summary");
 			var file       = Paths.get(summaryP);
 			dataAccess.all().forEach(summary::addTree);
@@ -118,9 +118,10 @@ final class ComSummarize implements ICommand
 					encoder.encodeTo(summary, swriter);
 				}
 			}
-			TheDemo.measure("summary", "depth", summary.getDepth());
-			TheDemo.measure("summary", "labels", summary.nbLabels());
-			TheDemo.measure("summary", "file", file.toString());
+			var measures = TheDemo.measures();
+			measures.set("summary", "depth", summary.getDepth());
+			measures.set("summary", "labels", summary.nbLabels());
+			measures.set("summary", "file", file.toString());
 		}
 		catch (URISyntaxException | IOException e)
 		{

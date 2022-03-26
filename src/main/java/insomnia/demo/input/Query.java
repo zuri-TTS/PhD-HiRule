@@ -9,6 +9,7 @@ import java.util.stream.Stream;
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
+import insomnia.demo.Measures;
 import insomnia.demo.TheConfiguration;
 import insomnia.demo.data.DataAccesses;
 import insomnia.demo.input.InputData.Filters;
@@ -53,10 +54,10 @@ public final class Query
 		return !qnative.isEmpty();
 	}
 
-	public static Stream<Object> getNatives(Configuration config) throws IOException, URISyntaxException
+	public static Stream<Object> getNatives(Configuration config, Measures measures) throws IOException, URISyntaxException
 	{
 		var file       = InputData.tryOpenStream(config.getString(TheConfiguration.OneProperty.QueryNative.getPropertyName(), ""));
-		var dataAccess = DataAccesses.getDataAccess(config);
+		var dataAccess = DataAccesses.getDataAccess(config, measures);
 
 		return InputData.getLinesOf(file).map(dataAccess::decodeNativeQuery);
 	}

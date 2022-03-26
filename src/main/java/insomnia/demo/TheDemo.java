@@ -7,7 +7,6 @@ import java.net.URLStreamHandler;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,7 +21,6 @@ import insomnia.demo.command.TheCommands;
 import insomnia.demo.help.URLStreamHandlerFactories;
 import insomnia.demo.help.URLStreamHandlers;
 import insomnia.demo.input.InputData;
-import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpFunctions;
 import insomnia.lib.net.StdUrlStreamHandler;
 
@@ -93,27 +91,16 @@ public final class TheDemo
 			this.name = name;
 		}
 
-		public String getName()
+		public String measureName()
 		{
 			return name;
 		}
-	}
-
-	public static Map<String, CPUTimeBenchmark> getMeasures(TheMeasures... measures)
-	{
-		var ret = new HashMap<String, CPUTimeBenchmark>();
-
-		for (var m : List.of(measures))
-			ret.put(m.getName(), measure(m.getName()));
-
-		return Map.copyOf(ret);
 	}
 
 	// ==========================================================================
 
 	private static void setup()
 	{
-		setMeasurePrefix("");
 		URL.setURLStreamHandlerFactory(URLStreamHandlerFactories.of(Map.<String, URLStreamHandler>of( //
 			"ressource", URLStreamHandlers.from(HelpFunctions.unchecked(u -> {
 				var path = u.getPath().substring(1); // Avoid the '/' first char
@@ -135,72 +122,6 @@ public final class TheDemo
 	}
 
 	// ==========================================================================
-
-	public static Measures getMeasures()
-	{
-		return measures;
-	}
-
-	public static CPUTimeBenchmark measure(String name)
-	{
-		return measures.getTime("measures", name);
-	}
-
-	public static CPUTimeBenchmark measure(TheMeasures m)
-	{
-		return measure(m.getName());
-	}
-
-	public static CPUTimeBenchmark measure(String group, String name, CPUTimeBenchmark set)
-	{
-		measures.set(group, name, set);
-		return set;
-	}
-
-	// ==========================================================================
-
-	private static String  measurePrefix = "";
-	private static boolean hasPrefix;
-
-	public static String getMeasurePrefix()
-	{
-		return measurePrefix;
-	}
-
-	public static boolean measureHasPrefix()
-	{
-		return hasPrefix;
-	}
-
-	public static void setMeasurePrefix(String pref)
-	{
-		measurePrefix = pref;
-		hasPrefix     = !pref.isEmpty();
-	}
-
-	private static String getMeasureName(String name)
-	{
-		if (hasPrefix)
-			return measurePrefix + "." + name;
-
-		return name;
-	}
-
-	public static void measure(String group, String name, String set)
-	{
-		measures.set(group, getMeasureName(name), set);
-	}
-
-	public static void measure(String group, String name, int set)
-	{
-		measures.set(group, getMeasureName(name), set);
-	}
-
-	public static CPUTimeBenchmark measure(String name, CPUTimeBenchmark set)
-	{
-		measures.set("measures", getMeasureName(name), set);
-		return set;
-	}
 
 	public static Measures measures()
 	{
@@ -260,7 +181,7 @@ public final class TheDemo
 					config = TheConfiguration.union(configs);
 				}
 			}
-			var mes = measure("command");
+			var mes = measures.getTime("command");
 
 			config.addProperty("#cli", cli);
 			mes.startChrono();

@@ -26,6 +26,8 @@ public interface IDataAccess<VAL, LBL>
 		CPUTimeBenchmark getTime();
 	}
 
+	String getCollectionName();
+
 	Stream<ITree<VAL, LBL>> all();
 
 	boolean hasAnswer(ITree<Object, KVLabel> query);

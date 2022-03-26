@@ -1,10 +1,16 @@
 package insomnia.demo.command;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -16,12 +22,14 @@ import org.apache.commons.collections4.bag.HashBag;
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
+import insomnia.demo.Measures;
 import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.data.DataAccesses;
 import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.InputData;
 import insomnia.demo.input.Query;
+import insomnia.demo.input.Summary;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.function.ProcessFunction;
@@ -76,7 +84,7 @@ final class ComQuerying implements ICommand
 
 	private enum QueryMode
 	{
-		EACH, STATS, QUERY, EXPLAIN;
+		EACH, STATS, QUERY, EXPLAIN, EXPLAINCOLLS;
 
 		static QueryMode fromString(String mode)
 		{
@@ -88,9 +96,6 @@ final class ComQuerying implements ICommand
 
 	private String getFileName(String file)
 	{
-		if (TheDemo.measureHasPrefix())
-			return TheDemo.getMeasurePrefix() + "-" + file;
-
 		return file;
 	}
 
@@ -107,22 +112,22 @@ final class ComQuerying implements ICommand
 
 	// ==========================================================================
 
-	private void executeEach(Configuration config) throws Exception
+	private void executeEach(Configuration config, Measures measures) throws Exception
 	{
-		TheDemo.setMeasurePrefix("each");
+		measures.setPrefix("each");
 
-		var create     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
-		var dataAccess = DataAccesses.getDataAccess(config);
-		var queries    = ComGenerate.queries(config);
+		var create     = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
+		var dataAccess = DataAccesses.getDataAccess(config, measures);
+		var queries    = ComGenerate.queries(config, measures);
 
 		create.startChrono();
 		var resultStream = dataAccess.executeEach(queries);
 		create.stopChrono();
 
-		var qeval      = TheDemo.measure(TheDemo.TheMeasures.QEVAL_TOTAL);
-		var strmTotal  = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL);
-		var strmNext   = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
-		var strmAction = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_ACTION);
+		var qeval      = measures.getTime(TheDemo.TheMeasures.QEVAL_TOTAL.measureName());
+		var strmTotal  = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL.measureName());
+		var strmNext   = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_NEXT.measureName());
+		var strmAction = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_ACTION.measureName());
 
 		Bag<String> allRecords = new HashBag<>();
 
@@ -174,11 +179,11 @@ final class ComQuerying implements ICommand
 			qnativeempty.close();
 			qnativenempty.close();
 		}
-		TheDemo.measure("reformulations", "empty", nbEmpties[0]);
-		TheDemo.measure("reformulations", "non-empty", nbQueries[0] - nbEmpties[0]);
-		TheDemo.measure("reformulations", "total", nbQueries[0]);
-		TheDemo.measure("answers", "total", allRecords.size());
-		TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
+		measures.set("reformulations", "empty", nbEmpties[0]);
+		measures.set("reformulations", "non-empty", nbQueries[0] - nbEmpties[0]);
+		measures.set("reformulations", "total", nbQueries[0]);
+		measures.set("answers", "total", allRecords.size());
+		measures.set("answers", "unique", allRecords.uniqueSet().size());
 
 		PrintStream printer;
 
@@ -194,10 +199,10 @@ final class ComQuerying implements ICommand
 			ComConfig.print(config, outputFilePrinter("config"), true);
 	}
 
-	private void stats(Configuration config) throws Exception
+	private void stats(Configuration config, Measures measures) throws Exception
 	{
-		var dataAccess = DataAccesses.getDataAccess(config);
-		var queries    = ComGenerate.queries(config);
+		var dataAccess = DataAccesses.getDataAccess(config, measures);
+		var queries    = ComGenerate.queries(config, measures);
 
 		int nbQueries[] = new int[1];
 		int nbEmpties[] = new int[1];
@@ -225,10 +230,10 @@ final class ComQuerying implements ICommand
 			qnativeempty.close();
 			qnativenempty.close();
 		}
-		TheDemo.measure("stats", "documents.nb", (int) dataAccess.getNbDocuments());
-		TheDemo.measure("stats", "queries.nb", nbQueries[0]);
-		TheDemo.measure("stats", "queries.empty.nb", nbEmpties[0]);
-		TheDemo.measure("stats", "queries.nonempty.nb", nbQueries[0] - nbEmpties[0]);
+		measures.set("stats", "documents.nb", (int) dataAccess.getNbDocuments());
+		measures.set("stats", "queries.nb", nbQueries[0]);
+		measures.set("stats", "queries.empty.nb", nbEmpties[0]);
+		measures.set("stats", "queries.nonempty.nb", nbQueries[0] - nbEmpties[0]);
 
 		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
 			ComConfig.print(config, outputFilePrinter("config"), true);
@@ -236,15 +241,17 @@ final class ComQuerying implements ICommand
 
 	public void execute(Configuration config) throws Exception
 	{
+		var measures = TheDemo.measures();
+
 		outputPattern = config.getString(MyOptions.OutputPattern.opt.getLongOpt());
 
 		switch (QueryMode.fromString(config.getString(MyOptions.QueryMode.opt.getLongOpt())))
 		{
 		case EACH:
-			executeEach(config);
+			executeEach(config, measures);
 			break;
 		case STATS:
-			stats(config);
+			stats(config, measures);
 			break;
 		case QUERY:
 			if (Query.isNative(config))
@@ -255,57 +262,139 @@ final class ComQuerying implements ICommand
 		case EXPLAIN:
 			explainBatch(config);
 			break;
+		case EXPLAINCOLLS:
+			explainColls(config);
+			break;
 		}
 	}
 
 	private void executeNative(Configuration config) throws Exception
 	{
-		var create = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
+		executeNative(config, TheDemo.measures());
+	}
 
-		var qnatives   = Query.getNatives(config);
-		var dataAccess = DataAccesses.getDataAccess(config);
+	private void executeNative(Configuration config, Measures measures) throws Exception
+	{
+		var create = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
+
+		var qnatives   = Query.getNatives(config, measures);
+		var dataAccess = DataAccesses.getDataAccess(config, measures);
 
 		create.startChrono();
 		var resultStream = dataAccess.executeNatives(qnatives);
 		create.stopChrono();
 
-		executeBatch(config, dataAccess, resultStream);
+		executeBatch(config, measures, dataAccess, resultStream);
 	}
+	// ==========================================================================
+
+	private void explainColls(Configuration config) throws IOException, ParseException, InterruptedException
+	{
+		var measures       = TheDemo.measures();
+		var summaries      = config.getList(String.class, "summary");
+		var dataAccesses   = DataAccesses.getDataAccesses(config);
+		var nbThreads      = dataAccesses.size();
+		var reformulations = ComGenerate.getReformulations(config, measures);
+		int i              = 0;
+
+		var callables = new ArrayList<Callable<Measures>>(nbThreads);
+
+		for (var dataAccess : dataAccesses)
+		{
+			var summary = Summary.get(config, summaries.get(i++));
+
+			callables.add(() -> {
+				var threadMeasures = new Measures();
+				var threadTime     = threadMeasures.getTime("thread", "time");
+
+				threadTime.startChrono();
+				threadMeasures.setPrefix(dataAccess.getCollectionName() + '/');
+
+				var filteredRefs = ComGenerate.queries(reformulations, summary, threadMeasures);
+
+				var create = threadMeasures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
+
+				create.startChrono();
+				var resultStream = dataAccess.explain(filteredRefs);
+				create.stopChrono();
+
+				explainBatch(config, threadMeasures, dataAccess, resultStream);
+				threadTime.stopChrono();
+				return threadMeasures;
+			});
+		}
+
+		var threadMeas  = measures.getTime("threads.time");
+		var execService = Executors.newFixedThreadPool(nbThreads);
+
+		threadMeas.startChrono();
+		var futures = execService.invokeAll(callables);
+		threadMeas.stopChrono();
+
+		execService.shutdown();
+
+		try
+		{
+			var answers_nb = 0;
+			var queries_nb = 0;
+
+			for (var f : futures)
+			{
+				var threadMeasure = f.get();
+				measures.addAll(threadMeasure);
+				answers_nb += threadMeasure.getInt("answers", "total");
+				queries_nb += threadMeasure.getInt("queries", "total");
+			}
+			measures.set("answers", "total", answers_nb);
+			measures.set("queries", "total", queries_nb);
+		}
+		catch (InterruptedException | ExecutionException e)
+		{
+			throw new AssertionError(e);
+		}
+		measures.set("threads", "nb", nbThreads);
+	}
+
 	// ==========================================================================
 
 	private void explainBatch(Configuration config) throws Exception
 	{
-		explainBatch(config, ComGenerate.queries(config));
+		explainBatch(config, TheDemo.measures());
 	}
 
-	private void explainBatch(Configuration config, Stream<ITree<Object, KVLabel>> queries) throws Exception
+	private void explainBatch(Configuration config, Measures measures) throws Exception
 	{
-		var create     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
-		var dataAccess = DataAccesses.getDataAccess(config);
+		explainBatch(config, measures, ComGenerate.queries(config, measures));
+	}
+
+	private void explainBatch(Configuration config, Measures measures, Stream<ITree<Object, KVLabel>> queries) throws Exception
+	{
+		var create     = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
+		var dataAccess = DataAccesses.getDataAccess(config, measures);
 		create.startChrono();
 		var resultStream = dataAccess.explain(queries);
 		create.stopChrono();
-		explainBatch(config, dataAccess, resultStream);
+		explainBatch(config, measures, dataAccess, resultStream);
 	}
 
-	private void explainBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream) throws Exception
+	private void explainBatch(Configuration config, Measures measures, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream) throws Exception
 	{
-		var strmNext   = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
-		var strmAction = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_ACTION);
+		var strmNext   = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_NEXT.measureName());
+		var strmAction = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_ACTION.measureName());
 		int nbAnsw[]   = { 0 };
-		var dbTime     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME);
+		var dbTime     = measures.getTime(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME.measureName());
 
-		executeBatch(config, dataAccess, resultStream, r -> {
+		executeBatch(config, measures, dataAccess, resultStream, r -> {
 			strmNext.stopChrono();
 			strmAction.startChrono();
 			var stats = dataAccess.explainStats(r);
 			nbAnsw[0] += stats.getNbAnswers();
 			dbTime.plus(stats.getTime());
-			TheDemo.measure(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME.getName() + dataAccess.getNbBatches(), stats.getTime());
+			measures.set(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME.measureName() + dataAccess.getNbBatches(), stats.getTime());
 			strmAction.stopChrono();
 			strmNext.startChrono();
 		}, () -> {
-			TheDemo.measure("answers", "total", nbAnsw[0]);
+			measures.set("answers", "total", nbAnsw[0]);
 		});
 	}
 
@@ -313,23 +402,30 @@ final class ComQuerying implements ICommand
 
 	private void executeBatch(Configuration config) throws Exception
 	{
-		executeBatch(config, ComGenerate.queries(config));
+		executeBatch(config, TheDemo.measures());
 	}
 
-	private void executeBatch(Configuration config, Stream<ITree<Object, KVLabel>> queries) throws Exception
+	private void executeBatch(Configuration config, Measures measures) throws Exception
 	{
-		var create     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
-		var dataAccess = DataAccesses.getDataAccess(config);
+		executeBatch(config, measures, ComGenerate.queries(config, measures));
+	}
+
+	private void executeBatch(Configuration config, Measures measures, Stream<ITree<Object, KVLabel>> queries) throws Exception
+	{
+		var create = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
+
+		var dataAccess = DataAccesses.getDataAccess(config, measures);
 		create.startChrono();
 		var resultStream = dataAccess.execute(queries);
 		create.stopChrono();
-		executeBatch(config, dataAccess, resultStream);
+
+		executeBatch(config, measures, dataAccess, resultStream);
 	}
 
-	private void executeBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream) throws Exception
+	private void executeBatch(Configuration config, Measures measures, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream) throws Exception
 	{
-		var strmNext   = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
-		var strmAction = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_ACTION);
+		var strmNext   = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_NEXT.measureName());
+		var strmAction = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_ACTION.measureName());
 
 		var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
 		var ans_out        = new PrintStream( //
@@ -343,7 +439,7 @@ final class ComQuerying implements ICommand
 
 		Bag<String> allRecords = new HashBag<>();
 
-		executeBatch(config, dataAccess, resultStream, r -> {
+		executeBatch(config, measures, dataAccess, resultStream, r -> {
 			strmNext.stopChrono();
 			strmAction.startChrono();
 			var id = dataAccess.getRecordId(r);
@@ -353,20 +449,18 @@ final class ComQuerying implements ICommand
 			strmNext.startChrono();
 		}, () -> {
 			ans_out.close();
-			TheDemo.measure("answers", "total", allRecords.size());
-			TheDemo.measure("answers", "unique", allRecords.uniqueSet().size());
+			measures.set("answers", "total", allRecords.size());
+			measures.set("answers", "unique", allRecords.uniqueSet().size());
 		});
 	}
 
 	// ==========================================================================
 
-	private void executeBatch(Configuration config, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream, Consumer<Object> resultAction, ProcessFunction end) throws Exception
+	private void executeBatch(Configuration config, Measures measures, IDataAccess<Object, KVLabel> dataAccess, Stream<Object> resultStream, Consumer<Object> resultAction, ProcessFunction end) throws Exception
 	{
-		TheDemo.setMeasurePrefix("");
-
-		var qeval     = TheDemo.measure(TheDemo.TheMeasures.QEVAL_TOTAL);
-		var strmTotal = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL);
-		var strmNext  = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_NEXT);
+		var qeval     = measures.getTime(TheDemo.TheMeasures.QEVAL_TOTAL.measureName());
+		var strmTotal = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_TOTAL.measureName());
+		var strmNext  = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_NEXT.measureName());
 
 		{
 			CPUTimeBenchmark.startChrono(qeval, strmNext, strmTotal);
@@ -375,14 +469,14 @@ final class ComQuerying implements ICommand
 			}
 			CPUTimeBenchmark.stopChrono(qeval, strmNext, strmTotal);
 
-			var create = TheDemo.measure(TheDemo.TheMeasures.QEVAL_STREAM_CREATE);
+			var create = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
 			qeval.plus(create);
 			strmTotal.plus(create);
 
 			end.process();
 		}
-		TheDemo.measure("queries", "total", (int) dataAccess.getNbQueries());
-		TheDemo.measure("queries", "batch.nb", (int) dataAccess.getNbBatches());
+		measures.set("queries", "total", (int) dataAccess.getNbQueries());
+		measures.set("queries", "batch.nb", (int) dataAccess.getNbBatches());
 
 		if (config.getBoolean(MyOptions.ConfigPrint.opt.getLongOpt(), false))
 			ComConfig.print(config, outputFilePrinter("config"), true);

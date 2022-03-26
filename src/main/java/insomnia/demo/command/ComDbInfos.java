@@ -28,7 +28,7 @@ final class ComDbInfos implements ICommand
 	{
 		try
 		{
-			var dataAccess = DataAccesses.getDataAccess(config);
+			var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
 			dataAccess.writeInfos(new PrintWriter(TheDemo.out(), true));
 		}
 		catch (URISyntaxException e)

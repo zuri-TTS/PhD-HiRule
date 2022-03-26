@@ -42,6 +42,7 @@ import com.mongodb.client.model.Filters;
 import insomnia.data.INode;
 import insomnia.data.ITree;
 import insomnia.data.ITreeNavigator;
+import insomnia.demo.Measures;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
@@ -93,7 +94,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	// ==========================================================================
 
-	private MongoClient      client;
+	// For now this can only handle one mongo client
+	private static MongoClient client;
+
 	private ConnectionString connection;
 
 	private MongoCollection<Document> collection;
@@ -110,14 +113,38 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private String summaryUrl, summaryType;
 
+	private String collectionName;
+
 	private ITreeNavigator<EnumSet<NodeType>, KVLabel> summaryNavigator;
 
-	private DataAccess(URI uri, Configuration config)
-	{
-		connection = new ConnectionString(uri.toString());
+	private CPUTimeBenchmark q2native;
 
-		client     = MongoClients.create(connection);
-		collection = client.getDatabase(connection.getDatabase()).getCollection(connection.getCollection());
+	private Measures measures;
+
+	private static Collection<CPUTimeBenchmark> streamMeasures;
+
+	private DataAccess(URI uri, Configuration config, String db, String collectionName, Measures measures)
+	{
+		if (null == client)
+		{
+			var nbcolls = config.getList("db.collection").size();
+			var uri_s   = uri.toString();
+
+			if (!uri_s.contains("/?"))
+				uri_s = uri_s + "/?";
+
+			uri_s      += "&maxConnecting=" + nbcolls;
+			connection  = new ConnectionString(uri_s);
+			client      = MongoClients.create(connection);
+		}
+		collection          = client.getDatabase(db).getCollection(collectionName);
+		this.collectionName = collectionName;
+		this.measures       = measures;
+		this.q2native       = measures.getTime(TheDemo.TheMeasures.QUERY_TO_NATIVE.measureName());
+		streamMeasures      = List.of( //
+			measures.getTime(TheMeasures.QEVAL_STREAM_NEXT.measureName()), //
+			measures.getTime(TheMeasures.QEVAL_STREAM_TOTAL.measureName()) //
+		);
 
 		queryBatchSize         = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getLongOpt(), 100);
 		dataBatchSize          = config.getInt(MyOptions.DATA_BATCHSIZE.opt.getLongOpt(), 100);
@@ -129,11 +156,17 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			throw new UnsupportedOperationException("'q2NativeDots' functionnality is disabled");
 
 		if (inhibitBatchStreamTime)
-			inhibitTime = TheDemo.measure(TheMeasures.QEVAL_STREAM_INHIB);
+			inhibitTime = measures.getTime(TheMeasures.QEVAL_STREAM_INHIB.measureName());
 
 		summaryUrl       = config.getString(MyOptions.Q2NATIVE_SUMMARY.opt.getLongOpt(), "");
 		summaryType      = config.getString(MyOptions.Q2NATIVE_SUMMARY_TYPE.opt.getLongOpt());
 		summaryNavigator = null;
+	}
+
+	@Override
+	public String getCollectionName()
+	{
+		return collectionName;
 	}
 
 	private void needSummary()
@@ -177,9 +210,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 	// ==========================================================================
 
-	public static IDataAccess<Object, KVLabel> open(URI uri, Configuration config)
+	public static IDataAccess<Object, KVLabel> open(URI uri, Configuration config, String db, String collection, Measures measures)
 	{
-		return new DataAccess(uri, config);
+		return new DataAccess(uri, config, db, collection, measures);
 	}
 
 	private static ITree<Object, KVLabel> doc2Tree(Document doc)
@@ -251,8 +284,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		else
 			throw new IllegalArgumentException(String.format("Cannot handle %s value", doc));
 	}
-
-	private static CPUTimeBenchmark q2native = TheDemo.measure(TheMeasures.QUERY_TO_NATIVE);
 
 	private Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
@@ -635,8 +666,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		};
 	}
 	// ==========================================================================
-
-	private static Collection<CPUTimeBenchmark> streamMeasures = TheDemo.getMeasures(TheMeasures.QEVAL_STREAM_NEXT, TheMeasures.QEVAL_STREAM_TOTAL).values();
 
 	private void inhibitBatch_start()
 	{

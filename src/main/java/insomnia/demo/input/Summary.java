@@ -64,6 +64,11 @@ public final class Summary
 		return get(uri, parseType(config.getString("summary.type")), config.getBoolean(TheConfiguration.OneProperty.SummaryFilterTypes.getPropertyName(), true));
 	}
 
+	public static ISummary<Object, KVLabel> get(Configuration config, String uri) throws IOException, ParseException
+	{
+		return get(uri, parseType(config.getString("summary.type")), config.getBoolean(TheConfiguration.OneProperty.SummaryFilterTypes.getPropertyName(), true));
+	}
+
 	public static ISummary<Object, KVLabel> get(String uri, Type type, boolean filterTypes) throws IOException, ParseException
 	{
 		if (uri.isEmpty())

@@ -16,6 +16,7 @@ import org.apache.commons.collections4.multimap.ArrayListValuedHashMap;
 import org.apache.commons.configuration2.Configuration;
 
 import insomnia.data.ITree;
+import insomnia.demo.Measures;
 import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
@@ -34,6 +35,7 @@ import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.help.HelpStream;
 import insomnia.rule.IRule;
+import insomnia.summary.ISummary;
 
 final class ComGenerate implements ICommand
 {
@@ -80,9 +82,6 @@ final class ComGenerate implements ICommand
 
 	private String getFileName(String file)
 	{
-		if (TheDemo.measureHasPrefix())
-			return TheDemo.getMeasurePrefix() + "-" + file;
-
 		return file;
 	}
 
@@ -109,13 +108,13 @@ final class ComGenerate implements ICommand
 		};
 	}
 
-	private static IBUFTA<Object, KVLabel> getReformulations(Configuration config) throws IOException, ParseException
+	public static IBUFTA<Object, KVLabel> getReformulations(Configuration config, Measures measures) throws IOException, ParseException
 	{
 		var query = Query.get(config);
 		var rules = Rules.get(config);
 
-		var rewriteMeas = TheDemo.measure(TheDemo.TheMeasures.QREWR_RULES_APPLY);
-		var totalMeas   = TheDemo.measure(TheDemo.TheMeasures.QREWR_RULES_TOTAL);
+		var rewriteMeas = measures.getTime(TheDemo.TheMeasures.QREWR_RULES_APPLY.measureName());
+		var totalMeas   = measures.getTime(TheDemo.TheMeasures.QREWR_RULES_TOTAL.measureName());
 
 		var builder = BUFTABuilder.create(query, KV.fsaInterpretation()) //
 			.setChunkModifier(rewriteMod(rules, rewriteMeas));
@@ -129,16 +128,21 @@ final class ComGenerate implements ICommand
 
 	// ==========================================================================
 
-	public static Stream<ITree<Object, KVLabel>> queries(Configuration config) throws IOException, ParseException
+	public static Stream<ITree<Object, KVLabel>> queries(Configuration config, Measures measures) throws IOException, ParseException
 	{
-		var summaryCreate = TheDemo.measure(TheMeasures.SUMMARY_CREATE);
+		var summaryCreate = measures.getTime(TheMeasures.SUMMARY_CREATE.measureName());
 
-		var reformulations = getReformulations(config);
+		var reformulations = getReformulations(config, measures);
 
 		summaryCreate.startChrono();
 		var summary = Summary.get(config);
 		summaryCreate.stopChrono();
 
+		return queries(reformulations, summary, measures);
+	}
+
+	public static Stream<ITree<Object, KVLabel>> queries(IBUFTA<Object, KVLabel> reformulations, ISummary<Object, KVLabel> summary, Measures measures) throws IOException, ParseException
+	{
 		Stream<ITree<Object, KVLabel>> st;
 
 		if (summary.isEmpty())
@@ -148,7 +152,7 @@ final class ComGenerate implements ICommand
 			summary.consider(reformulations);
 			st = summary.generateTrees();
 		}
-		var rewritingsGen = TheDemo.measure(TheMeasures.QREWR_GENERATION);
+		var rewritingsGen = measures.getTime(TheMeasures.QREWR_GENERATION.measureName());
 		return HelpStream.clamp(st, rewritingsGen::startChrono, rewritingsGen::stopChrono);
 	}
 
@@ -156,13 +160,14 @@ final class ComGenerate implements ICommand
 
 	public void execute(Configuration config) throws Exception
 	{
+		var measures = TheDemo.measures();
 		outputPattern = config.getString(MyOptions.OutputPattern.opt.getLongOpt());
 		var deduplicate = config.getBoolean(MyOptions.Deduplicate.opt.getLongOpt(), false);
 
 		int nb[]   = new int[] { 0 };
-		var access = DataAccesses.getDataAccess(config);
+		var access = DataAccesses.getDataAccess(config, measures);
 
-		var q = queries(config);
+		var q = queries(config, measures);
 
 		var queries = new PrintStream(outputFilePrinter("queries"));
 		var natives = new PrintStream(outputFilePrinter("natives"));
@@ -193,7 +198,7 @@ final class ComGenerate implements ICommand
 				dup.println();
 			}
 			dup.close();
-			TheDemo.measure("reformulations", "unique", queryDup.asMap().size());
+			measures.set("reformulations", "unique", queryDup.asMap().size());
 		}
 		else
 		{
@@ -205,6 +210,6 @@ final class ComGenerate implements ICommand
 		}
 		queries.close();
 		natives.close();
-		TheDemo.measure("reformulations", "nb", nb[0]);
+		measures.set("reformulations", "nb", nb[0]);
 	}
 }
