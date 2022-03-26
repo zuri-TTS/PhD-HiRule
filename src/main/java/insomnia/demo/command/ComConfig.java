@@ -1,9 +1,10 @@
 package insomnia.demo.command;
 
 import java.io.PrintStream;
+import java.util.Iterator;
+import java.util.List;
 
 import org.apache.commons.configuration2.Configuration;
-import org.apache.commons.configuration2.ConfigurationUtils;
 
 import insomnia.demo.TheDemo;
 
@@ -21,9 +22,31 @@ final class ComConfig implements ICommand
 		return "Show the actual configuration";
 	}
 
+	@SuppressWarnings("unchecked")
 	public static void print(Configuration config, PrintStream printer, boolean closePrinter)
 	{
-		ConfigurationUtils.dump(config, printer);
+		for (final Iterator<String> keys = config.getKeys(); keys.hasNext();)
+		{
+			final String key   = keys.next();
+			final Object value = config.getProperty(key);
+
+			if (value instanceof List<?>)
+
+				for (var item : ((List<Object>) value))
+				{
+					printer.print(key);
+					printer.print("=");
+					printer.println(item);
+				}
+			else
+			{
+				printer.print(key);
+				printer.print("=");
+				printer.println(value);
+			}
+		}
+
+		printer.flush();
 
 		if (closePrinter)
 			printer.close();
