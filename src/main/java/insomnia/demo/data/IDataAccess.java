@@ -44,7 +44,7 @@ public interface IDataAccess<VAL, LBL>
 
 	Object treeToQNative(ITree<VAL, LBL> query);
 
-	String getRecordId(Object record);
+	long getRecordId(Object record);
 
 	explainStats explainStats(Object record);
 

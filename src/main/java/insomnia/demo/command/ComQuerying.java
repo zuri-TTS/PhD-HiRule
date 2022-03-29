@@ -129,7 +129,7 @@ final class ComQuerying implements ICommand
 		var strmNext   = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_NEXT.measureName());
 		var strmAction = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_ACTION.measureName());
 
-		Bag<String> allRecords = new HashBag<>();
+		Bag<Long> allRecords = new HashBag<>();
 
 		int nbQueries[] = new int[1];
 		int nbEmpties[] = new int[1];
@@ -432,12 +432,12 @@ final class ComQuerying implements ICommand
 			displayAnswers ? outputFilePrinter("answers") : PrintStream.nullOutputStream() //
 		);
 
-		Consumer<String> displayProcess = displayAnswers //
+		Consumer<Long> displayProcess = displayAnswers //
 			? r -> ans_out.println(r) //
 			: r -> {
 			};
 
-		Bag<String> allRecords = new HashBag<>();
+		Bag<Long> allRecords = new HashBag<>();
 
 		executeBatch(config, measures, dataAccess, resultStream, r -> {
 			strmNext.stopChrono();

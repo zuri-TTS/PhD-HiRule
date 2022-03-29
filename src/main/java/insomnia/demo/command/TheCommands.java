@@ -24,6 +24,7 @@ public final class TheCommands
 			, new ComDbInfos().getEntry() //
 			, new ComQuerying().getEntry() //
 			, new ComHelp().getEntry() //
+			, new ComPartition().getEntry() //
 		);
 	}
 

@@ -733,9 +733,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public String getRecordId(Object record)
+	public long getRecordId(Object record)
 	{
-		return ((Document) record).getObjectId("_id").toHexString();
+		return ((Document) record).getInteger("_id");
 	}
 
 	@Override
