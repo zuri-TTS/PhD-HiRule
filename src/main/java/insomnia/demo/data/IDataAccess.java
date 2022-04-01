@@ -10,6 +10,7 @@ import org.apache.commons.lang3.tuple.Triple;
 import insomnia.data.ITree;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
+import insomnia.lib.numeric.MultiInterval;
 
 public interface IDataAccess<VAL, LBL>
 {
@@ -25,6 +26,10 @@ public interface IDataAccess<VAL, LBL>
 
 		CPUTimeBenchmark getTime();
 	}
+
+	void setLogicalPartition(MultiInterval partition);
+
+	MultiInterval getLogicalPartition();
 
 	String getCollectionName();
 

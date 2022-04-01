@@ -59,6 +59,7 @@ import insomnia.implem.summary.PathSummary;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.cpu.CPUTimeBenchmark.TIME;
 import insomnia.lib.help.HelpStream;
+import insomnia.lib.numeric.MultiInterval;
 import insomnia.summary.ISummary.NodeType;
 
 public final class DataAccess implements IDataAccess<Object, KVLabel>
@@ -101,6 +102,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private MongoCollection<Document> collection;
 
+	private MultiInterval logicalPartition;
+
 	private int queryBatchSize, dataBatchSize;
 
 	private boolean checkTerminalLeaf;
@@ -137,6 +140,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			connection  = new ConnectionString(uri_s);
 			client      = MongoClients.create(connection);
 		}
+		logicalPartition    = MultiInterval.nullValue();
 		collection          = client.getDatabase(db).getCollection(collectionName);
 		this.collectionName = collectionName;
 		this.measures       = measures;
@@ -167,6 +171,18 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public String getCollectionName()
 	{
 		return collectionName;
+	}
+
+	@Override
+	public MultiInterval getLogicalPartition()
+	{
+		return logicalPartition;
+	}
+
+	@Override
+	public void setLogicalPartition(MultiInterval partition)
+	{
+		logicalPartition = partition;
 	}
 
 	private void needSummary()
@@ -288,7 +304,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	private Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
 		q2native.startChrono();
-		BsonDocument filter = tree2Query(tree, tree.getRoot());
+		BsonDocument filter = tree2Query_(tree);
 		q2native.stopChrono();
 		return filter;
 	}
@@ -298,10 +314,17 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return val == Math.ceil(val);
 	}
 
-	private BsonDocument tree2Query(ITree<Object, KVLabel> tree, INode<Object, KVLabel> node)
+	private BsonDocument tree2Query_(ITree<Object, KVLabel> tree)
 	{
 		getSummaryNavigator().goToRoot();
-		return tree2Query(tree, node, EnumSet.of(NodeType.OBJECT));
+
+		if (!logicalPartition.isNull())
+		{
+			var tbuilder = new TreeBuilder<>(tree);
+			tbuilder.addChildDown(0).setLabel(KVLabels.create("_id")).setValue(logicalPartition).setTerminal();
+			tree = Trees.create(tbuilder);
+		}
+		return tree2Query(tree, tree.getRoot(), EnumSet.of(NodeType.OBJECT));
 	}
 
 	private static boolean isExists_op(BsonValue val)
@@ -473,6 +496,16 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			else
 				bsonValue = new BsonDouble(d);
 		}
+		else if (value instanceof MultiInterval)
+		{
+			var filters = partitionFilters(logicalPartition);
+
+			// TODO
+			if (filters.size() != 1)
+				throw new UnsupportedOperationException(String.format("For now it's impossible to handle more than one partition's Interval; has %s", logicalPartition));
+
+			return filters.get(0);
+		}
 		else
 			throw new IllegalArgumentException(String.format("Can't handle value '%s'", value));
 
@@ -564,10 +597,45 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return collection.estimatedDocumentCount();
 	}
 
+	private static List<BsonDocument> partitionFilters(MultiInterval partition)
+	{
+		var filters = new ArrayList<BsonDocument>();
+
+		for (var interval : partition.getIntervals())
+		{
+			filters.add(new BsonDocument() //
+				.append("$gte", new BsonInt32((int) interval.getMin())) //
+				.append("$lte", new BsonInt32((int) interval.getMax())));
+		}
+		return filters;
+	}
+
+	private static Bson partitionFilter(MultiInterval partition)
+	{
+		var filters = partitionFilters(partition);
+
+		if (filters.size() == 1)
+		{
+			return new BsonDocument("_id", filters.get(0));
+		}
+		else
+		{
+			for (int i = 0, c = filters.size(); i < c; i++)
+				filters.set(i, new BsonDocument("_id", filters.get(i)));
+
+			return new BsonDocument("$or", new BsonArray(filters));
+		}
+	}
+
 	@Override
 	public Stream<ITree<Object, KVLabel>> all()
 	{
-		var cursor = collection.find();
+		FindIterable<Document> cursor;
+
+		if (!logicalPartition.isNull())
+			cursor = collection.find(partitionFilter(logicalPartition));
+		else
+			cursor = collection.find();
 
 		if (dataBatchSize > 0)
 			cursor.batchSize(dataBatchSize);

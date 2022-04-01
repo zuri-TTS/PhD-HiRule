@@ -18,7 +18,7 @@ import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.data.DataAccesses;
 import insomnia.demo.input.InputData;
-import insomnia.implem.kv.KV;
+import insomnia.demo.input.LogicalPartition;
 import insomnia.lib.numeric.MultiInterval;
 
 final class ComPartition implements ICommand
@@ -86,19 +86,15 @@ final class ComPartition implements ICommand
 	{
 		var da = DataAccesses.getDataAccess(config, TheDemo.measures());
 
-		var partitions = config.getList(String.class, "partition");
+		var partitions       = config.getList(String.class, "partition");
+		var partitionDecoder = LogicalPartition.decoder();
 
 		for (var partition_str : partitions)
 		{
 			var idInterval = MultiInterval.empty();
-			var kv         = partition_str.split("[,;\s]+");
-
-			assert kv.length == 2;
-
-			var name   = kv[0];
-			var prefix = kv[1];
-
-			var prefixTree = KV.treeFromString(prefix);
+			var partition  = partitionDecoder.decode(partition_str);
+			var name       = partition.getName();
+			var prefixTree = partition.getPrefix();
 			var answers    = da.execute(Stream.of(prefixTree));
 
 			answers.map(da::getRecordId).forEach(idInterval::add);

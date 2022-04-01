@@ -54,7 +54,7 @@ public final class Query
 		return !qnative.isEmpty();
 	}
 
-	public static Stream<Object> getNatives(Configuration config, Measures measures) throws IOException, URISyntaxException
+	public static Stream<Object> getNatives(Configuration config, Measures measures) throws IOException, URISyntaxException, ParseException
 	{
 		var file       = InputData.tryOpenStream(config.getString(TheConfiguration.OneProperty.QueryNative.getPropertyName(), ""));
 		var dataAccess = DataAccesses.getDataAccess(config, measures);

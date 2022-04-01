@@ -2,6 +2,7 @@ package insomnia.demo.data;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.text.ParseException;
 import java.util.Collection;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -11,6 +12,7 @@ import org.apache.commons.configuration2.Configuration;
 
 import insomnia.demo.Measures;
 import insomnia.demo.data.mongodb.DataAccess;
+import insomnia.demo.input.LogicalPartition;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.help.HelpFunctions;
 
@@ -55,15 +57,27 @@ public final class DataAccesses
 		return collections.stream().map(HelpFunctions.avoidException(c -> getDataAccess(config, db, (String) c, new Measures()))).collect(Collectors.toList());
 	}
 
-	public static IDataAccess<Object, KVLabel> getDataAccess(Configuration config, Measures measures) throws URISyntaxException
+	public static IDataAccess<Object, KVLabel> getDataAccess(Configuration config, Measures measures) throws URISyntaxException, ParseException
 	{
 		return getDataAccess(config, config.getString("db"), config.getString("db.collection"), measures);
 	}
 
-	public static IDataAccess<Object, KVLabel> getDataAccess(Configuration config, String db, String collection, Measures measures) throws URISyntaxException
+	public static IDataAccess<Object, KVLabel> getDataAccess(Configuration config, String db, String collection, Measures measures) throws URISyntaxException, ParseException
 	{
-		var dataUri = new URI(config.getString("data"));
-		return DataAccessFactory.THE_FACTORY.i.get(dataUri.getScheme()).open(dataUri, config, db, collection, measures);
+		var dataUri    = new URI(config.getString("data"));
+		var dataAccess = DataAccessFactory.THE_FACTORY.i.get(dataUri.getScheme()).open(dataUri, config, db, collection, measures);
+
+		var confPartitions = config.getString("partition", "");
+
+		if (!confPartitions.isEmpty())
+		{
+			var partition = LogicalPartition.decoder().decode(confPartitions);
+			var interval  = partition.getInterval();
+
+			if (interval.isPresent())
+				dataAccess.setLogicalPartition(interval.get());
+		}
+		return dataAccess;
 	}
 
 	public static Map<String, Options> getDataAccessConfigProperties()

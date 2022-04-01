@@ -28,6 +28,7 @@ import insomnia.demo.TheDemo;
 import insomnia.demo.data.DataAccesses;
 import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.InputData;
+import insomnia.demo.input.LogicalPartition;
 import insomnia.demo.input.Query;
 import insomnia.demo.input.Summary;
 import insomnia.implem.kv.data.KVLabel;
@@ -267,6 +268,7 @@ final class ComQuerying implements ICommand
 			break;
 		}
 	}
+	// ==========================================================================
 
 	private void executeNative(Configuration config) throws Exception
 	{
@@ -292,16 +294,26 @@ final class ComQuerying implements ICommand
 	{
 		var measures       = TheDemo.measures();
 		var summaries      = config.getList(String.class, "summary");
+		var partitions     = config.getList(String.class, "partition");
 		var dataAccesses   = DataAccesses.getDataAccesses(config);
 		var nbThreads      = dataAccesses.size();
 		var reformulations = ComGenerate.getReformulations(config, measures);
 		int i              = 0;
 
 		var callables = new ArrayList<Callable<Measures>>(nbThreads);
+		var pdecoder  = LogicalPartition.decoder();
 
 		for (var dataAccess : dataAccesses)
 		{
-			var summary = Summary.get(config, summaries.get(i++));
+			var summary       = Summary.get(config, summaries.get(i));
+			var confPartition = partitions.get(i);
+			i++;
+
+			if (!confPartition.isEmpty())
+			{
+				var partition = pdecoder.decode(confPartition);
+				dataAccess.setLogicalPartition(partition.getInterval().get());
+			}
 
 			callables.add(() -> {
 				var threadMeasures = new Measures();
@@ -371,6 +383,7 @@ final class ComQuerying implements ICommand
 	{
 		var create     = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
 		var dataAccess = DataAccesses.getDataAccess(config, measures);
+
 		create.startChrono();
 		var resultStream = dataAccess.explain(queries);
 		create.stopChrono();
