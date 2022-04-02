@@ -8,9 +8,9 @@ import java.util.stream.Stream;
 import org.apache.commons.lang3.tuple.Triple;
 
 import insomnia.data.ITree;
+import insomnia.demo.input.LogicalPartition;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.lib.cpu.CPUTimeBenchmark;
-import insomnia.lib.numeric.MultiInterval;
 
 public interface IDataAccess<VAL, LBL>
 {
@@ -27,9 +27,9 @@ public interface IDataAccess<VAL, LBL>
 		CPUTimeBenchmark getTime();
 	}
 
-	void setLogicalPartition(MultiInterval partition);
+	void setLogicalPartition(LogicalPartition partition);
 
-	MultiInterval getLogicalPartition();
+	LogicalPartition getLogicalPartition();
 
 	String getCollectionName();
 

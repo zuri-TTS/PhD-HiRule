@@ -305,22 +305,35 @@ final class ComQuerying implements ICommand
 
 		for (var dataAccess : dataAccesses)
 		{
-			var summary       = Summary.get(config, summaries.get(i));
-			var confPartition = partitions.get(i);
+			var              summary       = Summary.get(config, summaries.get(i));
+			var              confPartition = partitions.get(i);
+			LogicalPartition partition;
 			i++;
 
 			if (!confPartition.isEmpty())
 			{
-				var partition = pdecoder.decode(confPartition);
-				dataAccess.setLogicalPartition(partition.getInterval().get());
+				partition = pdecoder.decode(confPartition);
+				dataAccess.setLogicalPartition(partition);
 			}
+			else
+				partition = dataAccess.getLogicalPartition();
 
 			callables.add(() -> {
 				var threadMeasures = new Measures();
-				var threadTime     = threadMeasures.getTime("thread", "time");
+				{
+					var prefixBuilder = new StringBuilder();
+					prefixBuilder.append(dataAccess.getCollectionName()).append('/');
+
+					var pname = partition.getName();
+
+					if (!pname.isEmpty())
+						prefixBuilder.append(pname).append('/');
+
+					threadMeasures.setPrefix(prefixBuilder.toString());
+				}
+				var threadTime = threadMeasures.getTime("thread", "time");
 
 				threadTime.startChrono();
-				threadMeasures.setPrefix(dataAccess.getCollectionName() + '/');
 
 				var filteredRefs = ComGenerate.queries(reformulations, summary, threadMeasures);
 

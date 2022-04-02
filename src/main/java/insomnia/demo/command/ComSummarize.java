@@ -24,7 +24,6 @@ import insomnia.implem.summary.LabelTypeSummaryWriter;
 import insomnia.implem.summary.PathSummary;
 import insomnia.implem.summary.PathSummaryWriter;
 import insomnia.lib.codec.IEncoder;
-import insomnia.lib.numeric.MultiInterval;
 import insomnia.summary.ISummary;
 
 final class ComSummarize implements ICommand
@@ -113,7 +112,7 @@ final class ComSummarize implements ICommand
 		if (confPartitions.isEmpty())
 		{
 			var summaryPath = config.getString("summary");
-			executePartition(config, summaryPath, null, TheDemo.measures());
+			executePartition(config, summaryPath, LogicalPartition.nullValue(), TheDemo.measures());
 		}
 		else
 		{
@@ -131,7 +130,7 @@ final class ComSummarize implements ICommand
 					var partition = pdecoder.decode(cp);
 
 					measures.setPrefix(partition.getName() + "/");
-					executePartition(config, summaryPath, partition.getInterval().orElseGet(() -> null), measures);
+					executePartition(config, summaryPath, partition, measures);
 					TheDemo.measures().addAll(measures);
 				}
 				catch (ParseException e)
@@ -142,7 +141,7 @@ final class ComSummarize implements ICommand
 		}
 	}
 
-	private void executePartition(Configuration config, String summaryPath, MultiInterval partition, Measures measures)
+	private void executePartition(Configuration config, String summaryPath, LogicalPartition partition, Measures measures)
 	{
 		try
 		{
@@ -153,9 +152,7 @@ final class ComSummarize implements ICommand
 			var encoder = SE.getValue();
 
 			var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
-
-			if (null != partition)
-				dataAccess.setLogicalPartition(partition);
+			dataAccess.setLogicalPartition(partition);
 
 			dataAccess.all().forEach(summary::addTree);
 

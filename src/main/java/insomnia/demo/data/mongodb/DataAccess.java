@@ -46,6 +46,7 @@ import insomnia.demo.Measures;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
+import insomnia.demo.input.LogicalPartition;
 import insomnia.demo.input.Summary;
 import insomnia.implem.data.TreeTypeNavigators;
 import insomnia.implem.data.Trees;
@@ -102,7 +103,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private MongoCollection<Document> collection;
 
-	private MultiInterval logicalPartition;
+	private LogicalPartition logicalPartition;
 
 	private int queryBatchSize, dataBatchSize;
 
@@ -122,8 +123,6 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private CPUTimeBenchmark q2native;
 
-	private Measures measures;
-
 	private static Collection<CPUTimeBenchmark> streamMeasures;
 
 	private DataAccess(URI uri, Configuration config, String db, String collectionName, Measures measures)
@@ -140,10 +139,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			connection  = new ConnectionString(uri_s);
 			client      = MongoClients.create(connection);
 		}
-		logicalPartition    = MultiInterval.nullValue();
+		logicalPartition    = LogicalPartition.nullValue();
 		collection          = client.getDatabase(db).getCollection(collectionName);
 		this.collectionName = collectionName;
-		this.measures       = measures;
 		this.q2native       = measures.getTime(TheDemo.TheMeasures.QUERY_TO_NATIVE.measureName());
 		streamMeasures      = List.of( //
 			measures.getTime(TheMeasures.QEVAL_STREAM_NEXT.measureName()), //
@@ -174,13 +172,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public MultiInterval getLogicalPartition()
+	public LogicalPartition getLogicalPartition()
 	{
 		return logicalPartition;
 	}
 
 	@Override
-	public void setLogicalPartition(MultiInterval partition)
+	public void setLogicalPartition(LogicalPartition partition)
 	{
 		logicalPartition = partition;
 	}
@@ -318,10 +316,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	{
 		getSummaryNavigator().goToRoot();
 
-		if (!logicalPartition.isNull())
+		if (!logicalPartition.getInterval().isNull())
 		{
 			var tbuilder = new TreeBuilder<>(tree);
-			tbuilder.addChildDown(0).setLabel(KVLabels.create("_id")).setValue(logicalPartition).setTerminal();
+			tbuilder.addChildDown(0).setLabel(KVLabels.create("_id")).setValue(logicalPartition.getInterval()).setTerminal();
 			tree = Trees.create(tbuilder);
 		}
 		return tree2Query(tree, tree.getRoot(), EnumSet.of(NodeType.OBJECT));
@@ -597,11 +595,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return collection.estimatedDocumentCount();
 	}
 
-	private static List<BsonDocument> partitionFilters(MultiInterval partition)
+	private static List<BsonDocument> partitionFilters(LogicalPartition partition)
 	{
 		var filters = new ArrayList<BsonDocument>();
 
-		for (var interval : partition.getIntervals())
+		for (var interval : partition.getInterval().getIntervals())
 		{
 			filters.add(new BsonDocument() //
 				.append("$gte", new BsonInt32((int) interval.getMin())) //
@@ -610,7 +608,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return filters;
 	}
 
-	private static Bson partitionFilter(MultiInterval partition)
+	private static Bson partitionFilter(LogicalPartition partition)
 	{
 		var filters = partitionFilters(partition);
 

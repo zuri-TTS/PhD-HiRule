@@ -72,10 +72,7 @@ public final class DataAccesses
 		if (!confPartitions.isEmpty())
 		{
 			var partition = LogicalPartition.decoder().decode(confPartitions);
-			var interval  = partition.getInterval();
-
-			if (interval.isPresent())
-				dataAccess.setLogicalPartition(interval.get());
+			dataAccess.setLogicalPartition(partition);
 		}
 		return dataAccess;
 	}
