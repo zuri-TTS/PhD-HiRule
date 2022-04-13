@@ -43,6 +43,7 @@ import insomnia.data.INode;
 import insomnia.data.ITree;
 import insomnia.data.ITreeNavigator;
 import insomnia.demo.Measures;
+import insomnia.demo.TheConfiguration;
 import insomnia.demo.TheDemo;
 import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
@@ -105,6 +106,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private LogicalPartition logicalPartition;
 
+	private String partitionID;
+
 	private int queryBatchSize, dataBatchSize;
 
 	private boolean checkTerminalLeaf;
@@ -148,6 +151,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			measures.getTime(TheMeasures.QEVAL_STREAM_TOTAL.measureName()) //
 		);
 
+		partitionID            = config.getString(TheConfiguration.OneProperty.PartitionID.getPropertyName());
 		queryBatchSize         = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getLongOpt(), 100);
 		dataBatchSize          = config.getInt(MyOptions.DATA_BATCHSIZE.opt.getLongOpt(), 100);
 		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getLongOpt(), true);
@@ -319,7 +323,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		if (!logicalPartition.getInterval().isNull())
 		{
 			var tbuilder = new TreeBuilder<>(tree);
-			tbuilder.addChildDown(0).setLabel(KVLabels.create("_id")).setValue(logicalPartition.getInterval()).setTerminal();
+			tbuilder.addChildDown(0).setLabel(KVLabels.create(partitionID)).setValue(logicalPartition.getInterval()).setTerminal();
 			tree = Trees.create(tbuilder);
 		}
 		return tree2Query(tree, tree.getRoot(), EnumSet.of(NodeType.OBJECT));
@@ -608,18 +612,18 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return filters;
 	}
 
-	private static Bson partitionFilter(LogicalPartition partition)
+	private Bson partitionFilter(LogicalPartition partition)
 	{
 		var filters = partitionFilters(partition);
 
 		if (filters.size() == 1)
 		{
-			return new BsonDocument("_id", filters.get(0));
+			return new BsonDocument(partitionID, filters.get(0));
 		}
 		else
 		{
 			for (int i = 0, c = filters.size(); i < c; i++)
-				filters.set(i, new BsonDocument("_id", filters.get(i)));
+				filters.set(i, new BsonDocument(partitionID, filters.get(i)));
 
 			return new BsonDocument("$or", new BsonArray(filters));
 		}
@@ -801,7 +805,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	@Override
 	public long getRecordId(Object record)
 	{
-		return ((Document) record).getInteger("_id");
+		return ((Document) record).getInteger(partitionID);
 	}
 
 	@Override
