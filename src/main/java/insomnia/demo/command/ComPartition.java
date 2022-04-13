@@ -86,7 +86,7 @@ final class ComPartition implements ICommand
 	{
 		var da = DataAccesses.getDataAccess(config, TheDemo.measures());
 
-		var partitions       = config.getList(String.class, "partition");
+		var partitions       = config.getList(String.class, "partition", List.of());
 		var partitionDecoder = LogicalPartition.decoder();
 
 		for (var partition_str : partitions)
