@@ -605,9 +605,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 		for (var interval : partition.getInterval().getIntervals())
 		{
-			filters.add(new BsonDocument() //
-				.append("$gte", new BsonInt32((int) interval.getMin())) //
-				.append("$lte", new BsonInt32((int) interval.getMax())));
+			if (interval.lsize() == 1)
+				filters.add(new BsonDocument() //
+					.append("$eq", new BsonInt32((int) interval.getMin()))); //
+			else
+				filters.add(new BsonDocument() //
+					.append("$gte", new BsonInt32((int) interval.getMin())) //
+					.append("$lte", new BsonInt32((int) interval.getMax())));
 		}
 		return filters;
 	}
