@@ -634,7 +634,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	{
 		FindIterable<Document> cursor;
 
-		if (!logicalPartition.isNull())
+		if (!logicalPartition.getInterval().isNull())
 			cursor = collection.find(partitionFilter(logicalPartition));
 		else
 			cursor = collection.find();
