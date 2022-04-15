@@ -634,12 +634,19 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public Stream<ITree<Object, KVLabel>> all()
+	public Stream<Object> all()
 	{
 		FindIterable<Document> cursor;
 
 		if (!logicalPartition.getInterval().isNull())
 			cursor = collection.find(partitionFilter(logicalPartition));
+		else if (!logicalPartition.isNull())
+		{
+			summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.OBJECT));
+			var prefixTree = logicalPartition.getPrefix();
+			cursor           = collection.find(tree2Query(prefixTree));
+			summaryNavigator = null;
+		}
 		else
 			cursor = collection.find();
 

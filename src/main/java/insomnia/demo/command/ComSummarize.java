@@ -152,7 +152,6 @@ final class ComSummarize implements ICommand
 			var encoder = SE.getValue();
 
 			var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
-			dataAccess.setLogicalPartition(partition);
 
 			dataAccess.all().map(dataAccess::nativeToTree).forEach(summary::addTree);
 

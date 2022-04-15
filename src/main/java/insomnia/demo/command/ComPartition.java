@@ -8,7 +8,6 @@ import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.util.List;
-import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
@@ -94,10 +93,8 @@ final class ComPartition implements ICommand
 			var idInterval = MultiInterval.empty();
 			var partition  = partitionDecoder.decode(partition_str);
 			var name       = partition.getName();
-			var prefixTree = partition.getPrefix();
-			var answers    = da.execute(Stream.of(prefixTree));
 
-			answers.map(da::getRecordId).forEach(idInterval::add);
+			da.all().map(da::getRecordId).forEach(idInterval::add);
 
 			try (var out = outputFilePrinter(name))
 			{
