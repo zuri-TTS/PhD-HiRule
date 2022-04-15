@@ -154,7 +154,7 @@ final class ComSummarize implements ICommand
 			var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
 			dataAccess.setLogicalPartition(partition);
 
-			dataAccess.all().forEach(summary::addTree);
+			dataAccess.all().map(dataAccess::nativeToTree).forEach(summary::addTree);
 
 			if (!summaryPath.isEmpty())
 			{

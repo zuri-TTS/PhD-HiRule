@@ -646,8 +646,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		if (dataBatchSize > 0)
 			cursor.batchSize(dataBatchSize);
 
-		return HelpStream.toStream(cursor) //
-			.map(DataAccess::doc2Tree);
+		return HelpStream.<Object>toStreamDownCast(cursor);
 	}
 
 	private Stream<Object> wrapDocumentCursor(FindIterable<Document> cursor)

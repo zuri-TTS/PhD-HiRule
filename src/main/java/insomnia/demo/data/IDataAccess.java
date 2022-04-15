@@ -33,7 +33,7 @@ public interface IDataAccess<VAL, LBL>
 
 	String getCollectionName();
 
-	Stream<ITree<VAL, LBL>> all();
+	Stream<Object> all();
 
 	boolean hasAnswer(ITree<Object, KVLabel> query);
 
