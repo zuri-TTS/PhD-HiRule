@@ -57,15 +57,14 @@ public final class Summary
 	public static ISummary<Object, KVLabel> get(Configuration config) throws IOException, ParseException
 	{
 		var uri = config.getString(TheConfiguration.OneProperty.Summary.getPropertyName());
-
-		if (uri.isEmpty())
-			return LabelSummary.create();
-
-		return get(uri, parseType(config.getString("summary.type")), config.getBoolean(TheConfiguration.OneProperty.SummaryFilterTypes.getPropertyName(), true));
+		return get(config, uri);
 	}
 
 	public static ISummary<Object, KVLabel> get(Configuration config, String uri) throws IOException, ParseException
 	{
+		if (uri.isEmpty())
+			return LabelSummary.create();
+
 		return get(uri, parseType(config.getString("summary.type")), config.getBoolean(TheConfiguration.OneProperty.SummaryFilterTypes.getPropertyName(), true));
 	}
 
