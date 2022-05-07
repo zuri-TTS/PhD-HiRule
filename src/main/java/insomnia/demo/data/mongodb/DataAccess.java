@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
@@ -116,6 +117,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private boolean q2NativeDots;
 
+	private Predicate<ITree<Object, KVLabel>> queryFilter;
+
 	private CPUTimeBenchmark inhibitTime;
 
 	private String summaryUrl, summaryType;
@@ -187,6 +190,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		logicalPartition = partition;
 	}
 
+	@Override
+	public void setQueryFilter(Predicate<ITree<Object, KVLabel>> filter)
+	{
+		this.queryFilter = filter;
+	}
+
 	private void needSummary()
 	{
 		if (!summaryUrl.isEmpty())
@@ -226,6 +235,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 		return summaryNavigator;
 	}
+
 	// ==========================================================================
 
 	public static IDataAccess<Object, KVLabel> open(URI uri, Configuration config, String db, String collection, Measures measures)
@@ -676,9 +686,18 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	// ==========================================================================
 
+	public Stream<ITree<Object, KVLabel>> wrapQueries(Stream<ITree<Object, KVLabel>> queries)
+	{
+		if (queryFilter != null)
+			return queries.filter(queryFilter);
+
+		return queries;
+	}
+
 	@Override
 	public Stream<Triple<ITree<Object, KVLabel>, Object, Stream<Object>>> executeEach(Stream<ITree<Object, KVLabel>> queries)
 	{
+		queries = wrapQueries(queries);
 		return queries.map(q -> {
 			var bsonq  = tree2Query(q);
 			var cursor = collection.find(bsonq);
@@ -777,6 +796,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public Stream<Object> execute(Stream<ITree<Object, KVLabel>> queries)
 	{
 		nbQueries = new long[] { 0, 0 };
+		queries   = wrapQueries(queries);
 		var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
 
 		return batch.flatMap(this::executeBson);
@@ -786,6 +806,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	public Stream<Object> explain(Stream<ITree<Object, KVLabel>> queries)
 	{
 		nbQueries = new long[] { 0, 0 };
+		queries   = wrapQueries(queries);
 		var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
 
 		return batch.flatMap(this::explainBson);

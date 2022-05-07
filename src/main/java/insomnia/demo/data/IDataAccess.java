@@ -3,6 +3,7 @@ package insomnia.demo.data;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.apache.commons.lang3.tuple.Triple;
@@ -26,6 +27,8 @@ public interface IDataAccess<VAL, LBL>
 
 		CPUTimeBenchmark getTime();
 	}
+
+	void setQueryFilter(Predicate<ITree<VAL, LBL>> filter);
 
 	void setLogicalPartition(LogicalPartition partition);
 

@@ -3,15 +3,18 @@ package insomnia.demo.command;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.net.URISyntaxException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -40,7 +43,8 @@ final class ComQuerying implements ICommand
 	private enum MyOptions
 	{
 		OutputPattern(Option.builder().longOpt("output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
-		, QueryMode(Option.builder().longOpt("querying.mode").desc("(query|explain|each) Query mode").build()) //
+		, QueryMode(Option.builder().longOpt("querying.mode").desc("(each|stats|query|explain|explaincolls) Query mode").build()) //
+		, QueryFilter(Option.builder().longOpt("querying.filter").desc("(empty|noempty) Filter queries that are only empty xor not").build()) //
 		, DisplayAnswers(Option.builder().longOpt("querying.display.answers").desc("(bool) Display the answers").build()) //
 		, ConfigPrint(Option.builder().longOpt("querying.config.print").desc("(bool) Print the config in a file").build()) //
 		;
@@ -82,6 +86,18 @@ final class ComQuerying implements ICommand
 	}
 
 	// ==========================================================================
+	private enum QueryFilter
+	{
+		NONE, EMPTY, NOEMPTY;
+
+		static QueryFilter fromString(String mode)
+		{
+			if (mode.isEmpty())
+				return NONE;
+
+			return QueryFilter.valueOf(mode.toUpperCase());
+		}
+	}
 
 	private enum QueryMode
 	{
@@ -111,6 +127,53 @@ final class ComQuerying implements ICommand
 		return new PrintStream(InputData.fakeOpenOutputPath(filePath, options));
 	}
 
+	private QueryFilter getQueryFilterE(Configuration config)
+	{
+		return QueryFilter.fromString(config.getString(MyOptions.QueryFilter.opt.getLongOpt()));
+	}
+
+	private Predicate<ITree<Object, KVLabel>> getQueryFilter(QueryFilter filterType, IDataAccess<Object, KVLabel> dataAccess)
+	{
+		switch (filterType)
+		{
+		case NONE:
+			return null;
+		case EMPTY:
+			return t -> !dataAccess.hasAnswer(t);
+		case NOEMPTY:
+			return t -> dataAccess.hasAnswer(t);
+		default:
+			throw new AssertionError();
+		}
+	}
+
+	private void assignQueryFilter(QueryFilter filterType, IDataAccess<Object, KVLabel> dataAccess)
+	{
+		var qfilter = getQueryFilter(filterType, dataAccess);
+
+		if (null != qfilter)
+			dataAccess.setQueryFilter(qfilter);
+	}
+
+	private IDataAccess<Object, KVLabel> getDataAccess(Configuration config, Measures measures) throws URISyntaxException, ParseException
+	{
+		var ret = DataAccesses.getDataAccess(config, measures);
+		assignQueryFilter(getQueryFilterE(config), ret);
+		return ret;
+	}
+
+	private Collection<IDataAccess<Object, KVLabel>> getDataAccesses(Configuration config)
+	{
+		var ret         = DataAccesses.getDataAccesses(config);
+		var qfilterType = getQueryFilterE(config);
+
+		if (qfilterType != QueryFilter.NONE)
+			for (var da : ret)
+				assignQueryFilter(qfilterType, da);
+
+		return ret;
+	}
+
 	// ==========================================================================
 
 	private void executeEach(Configuration config, Measures measures) throws Exception
@@ -118,7 +181,7 @@ final class ComQuerying implements ICommand
 		measures.setPrefix("each");
 
 		var create     = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
-		var dataAccess = DataAccesses.getDataAccess(config, measures);
+		var dataAccess = getDataAccess(config, measures);
 		var queries    = ComGenerate.queries(config, measures);
 
 		create.startChrono();
@@ -202,7 +265,7 @@ final class ComQuerying implements ICommand
 
 	private void stats(Configuration config, Measures measures) throws Exception
 	{
-		var dataAccess = DataAccesses.getDataAccess(config, measures);
+		var dataAccess = getDataAccess(config, measures);
 		var queries    = ComGenerate.queries(config, measures);
 
 		int nbQueries[] = new int[1];
@@ -280,7 +343,7 @@ final class ComQuerying implements ICommand
 		var create = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
 
 		var qnatives   = Query.getNatives(config, measures);
-		var dataAccess = DataAccesses.getDataAccess(config, measures);
+		var dataAccess = getDataAccess(config, measures);
 
 		create.startChrono();
 		var resultStream = dataAccess.executeNatives(qnatives);
@@ -295,7 +358,7 @@ final class ComQuerying implements ICommand
 		var measures       = TheDemo.measures();
 		var summaries      = config.getList(String.class, "summary");
 		var partitions     = config.getList(String.class, "partition");
-		var dataAccesses   = DataAccesses.getDataAccesses(config);
+		var dataAccesses   = getDataAccesses(config);
 		var nbThreads      = dataAccesses.size();
 		var reformulations = ComGenerate.getReformulations(config, measures);
 		int i              = 0;
@@ -395,7 +458,7 @@ final class ComQuerying implements ICommand
 	private void explainBatch(Configuration config, Measures measures, Stream<ITree<Object, KVLabel>> queries) throws Exception
 	{
 		var create     = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_CREATE.measureName());
-		var dataAccess = DataAccesses.getDataAccess(config, measures);
+		var dataAccess = getDataAccess(config, measures);
 
 		create.startChrono();
 		var resultStream = dataAccess.explain(queries);
