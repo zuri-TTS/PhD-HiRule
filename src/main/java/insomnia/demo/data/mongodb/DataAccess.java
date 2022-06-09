@@ -50,6 +50,7 @@ import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.LogicalPartition;
 import insomnia.demo.input.Summary;
+import insomnia.implem.data.TreeFilters.NodeInfos;
 import insomnia.implem.data.TreeTypeNavigators;
 import insomnia.implem.data.Trees;
 import insomnia.implem.data.creational.TreeBuilder;
@@ -125,7 +126,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private String collectionName;
 
-	private ITreeNavigator<EnumSet<NodeType>, KVLabel> summaryNavigator;
+	private ITreeNavigator<NodeInfos<Object>, KVLabel> summaryNavigator;
 
 	private CPUTimeBenchmark q2native;
 
@@ -228,7 +229,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.MULTIPLE));
 	}
 
-	private ITreeNavigator<EnumSet<NodeType>, KVLabel> getSummaryNavigator()
+	private ITreeNavigator<NodeInfos<Object>, KVLabel> getSummaryNavigator()
 	{
 		if (null == summaryNavigator)
 			needSummary();
@@ -429,7 +430,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 				summaryNavigator.setCurrentNode(currentPos);
 				summaryNavigator.followFirstPath(List.of(label));
-				var doc = tree2Query(tree, c.getChild(), summaryNavigator.getCurrentNode().getValue());
+				var doc = tree2Query(tree, c.getChild(), summaryNavigator.getCurrentNode().getValue().getNodeTypes());
 				{
 					var res = objectMergeChilds(doc, labelPrefix);
 					doc = (null != res) ? res : new BsonDocument(label.asString(), doc);

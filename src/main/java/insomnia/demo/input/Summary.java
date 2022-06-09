@@ -10,6 +10,7 @@ import org.apache.commons.configuration2.Configuration;
 import insomnia.data.ITree;
 import insomnia.demo.TheConfiguration;
 import insomnia.demo.input.InputData.Filters;
+import insomnia.implem.data.TreeFilters.NodeInfos;
 import insomnia.implem.kv.KV;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
@@ -20,7 +21,6 @@ import insomnia.implem.summary.PathSummary;
 import insomnia.lib.codec.IDecoder;
 import insomnia.lib.help.HelpFunctions;
 import insomnia.summary.ISummary;
-import insomnia.summary.ISummary.NodeType;
 
 public final class Summary
 {
@@ -82,9 +82,10 @@ public final class Summary
 		{
 		case PATH:
 		{
-			var stree = KV.treeFromString(Files.readString(optPath.get()));
-			var tree  = ITree.update(stree, HelpFunctions.avoidException(v -> NodeType.decode((String) v)), Function.identity());
-			var s     = PathSummary.create(tree);
+			var stree   = KV.treeFromString(Files.readString(optPath.get()));
+			var decoder = NodeInfos.decoder();
+			var tree    = ITree.update(stree, HelpFunctions.unchecked(v -> decoder.decode((String) v)), Function.identity());
+			var s       = PathSummary.create(tree);
 			s.setFilterTypes(filterTypes);
 			return s;
 		}
