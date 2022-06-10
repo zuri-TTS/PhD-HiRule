@@ -50,6 +50,7 @@ import insomnia.demo.TheDemo.TheMeasures;
 import insomnia.demo.data.IDataAccess;
 import insomnia.demo.input.LogicalPartition;
 import insomnia.demo.input.Summary;
+import insomnia.implem.data.TreeFilters;
 import insomnia.implem.data.TreeFilters.NodeInfos;
 import insomnia.implem.data.TreeTypeNavigators;
 import insomnia.implem.data.Trees;
@@ -57,8 +58,7 @@ import insomnia.implem.data.creational.TreeBuilder;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.kv.data.KVValues;
-import insomnia.implem.summary.ILabelSummary;
-import insomnia.implem.summary.LabelTypeSummary;
+import insomnia.implem.summary.LabelSummary;
 import insomnia.implem.summary.PathSummary;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.cpu.CPUTimeBenchmark.TIME;
@@ -209,14 +209,12 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 			try
 			{
-				var summary = Summary.get(summaryUrl, Summary.parseType(summaryType), false);
+				var summary = Summary.get(summaryUrl, Summary.parseType(summaryType), EnumSet.noneOf(TreeFilters.Filters.class));
 
 				if (summary instanceof PathSummary<?, ?>)
 					summaryNavigator = TreeTypeNavigators.from((PathSummary<Object, KVLabel>) summary, true);
-				else if (summary instanceof LabelTypeSummary<?, ?>)
-					summaryNavigator = TreeTypeNavigators.constant((LabelTypeSummary<Object, KVLabel>) summary, true);
-				else if (summary instanceof ILabelSummary<?, ?>)
-					summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.MULTIPLE));
+				else if (summary instanceof LabelSummary<?, ?>)
+					summaryNavigator = TreeTypeNavigators.constant((LabelSummary<Object, KVLabel>) summary, true);
 				else
 					throw new IllegalArgumentException(String.format("[mongodb] Can't handle the summary: %s", summary));
 			}

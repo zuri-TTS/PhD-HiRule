@@ -37,7 +37,7 @@ public final class TheConfiguration
 		, QueryNative(Option.builder().longOpt("query.native").desc("Path to a file of native queries").build()) //
 		, Rules(Option.builder().longOpt("rules").desc("Path to a file of rules or a directory of files").build()) //
 		, Summary(Option.builder().longOpt("summary").desc("Path to the summary file, or empty if no summary").build()) //
-		, SummaryType(Option.builder().longOpt("summary.type").desc("Type of the summary file: key|key-type|path").build()) //
+		, SummaryType(Option.builder().longOpt("summary.type").desc("Type of the summary file: label|path").build()) //
 		, SummaryFilterTypes(Option.builder().longOpt("summary.filter.types").desc("Use the 'NodeTypes' informations from the summary to filter more reformulations").build()) //
 		, PartitionID(Option.builder().longOpt("partition.id").desc("The key to use as the partition ID in the collection").build()) //
 		;

@@ -19,8 +19,6 @@ import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.summary.LabelSummary;
 import insomnia.implem.summary.LabelSummaryWriter;
-import insomnia.implem.summary.LabelTypeSummary;
-import insomnia.implem.summary.LabelTypeSummaryWriter;
 import insomnia.implem.summary.PathSummary;
 import insomnia.implem.summary.PathSummaryWriter;
 import insomnia.lib.codec.IEncoder;
@@ -76,18 +74,11 @@ final class ComSummarize implements ICommand
 
 		switch (type)
 		{
-		case "key":
+		case "label":
 			summary = LabelSummary.create();
 			encoder = (s, w) -> {
 				new LabelSummaryWriter<Object, KVLabel>().setLabelEncoder(KVLabels::encodeTo) //
 					.writeTo((LabelSummary<Object, KVLabel>) s, w);
-			};
-			break;
-		case "key-type":
-			summary = LabelTypeSummary.create();
-			encoder = (s, w) -> {
-				new LabelTypeSummaryWriter<Object, KVLabel>().setLabelEncoder(KVLabels::encodeTo) //
-					.writeTo((LabelTypeSummary<Object, KVLabel>) s, w);
 			};
 			break;
 		case "path":
