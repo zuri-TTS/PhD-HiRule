@@ -142,6 +142,15 @@ final class ComSummarize implements ICommand
 			var summary = SE.getKey();
 			var encoder = SE.getValue();
 
+			int stringValuePrefixSize = config.getInt(TheConfiguration.OneProperty.SummaryFilterStringValuePrefix.getPropertyName(), 0);
+
+			if (summary instanceof LabelSummary<?, ?>)
+				((LabelSummary<Object, KVLabel>) summary).setFilterStringValue(stringValuePrefixSize);
+			else if (summary instanceof PathSummary<?, ?>)
+				((PathSummary<Object, KVLabel>) summary).setFilterStringValue(stringValuePrefixSize);
+			else
+				throw new IllegalArgumentException("Can't handle the class " + summary.getClass().toString());
+
 			var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
 
 			dataAccess.all().map(dataAccess::nativeToTree).forEach(summary::addTree);

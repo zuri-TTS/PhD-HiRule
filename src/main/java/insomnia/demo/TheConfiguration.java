@@ -39,6 +39,7 @@ public final class TheConfiguration
 		, Summary(Option.builder().longOpt("summary").desc("Path to the summary file, or empty if no summary").build()) //
 		, SummaryType(Option.builder().longOpt("summary.type").desc("Type of the summary file: label|path").build()) //
 		, SummaryFilterTypes(Option.builder().longOpt("summary.filter.types").desc("Use the 'NodeTypes' informations from the summary to filter more reformulations").build()) //
+		, SummaryFilterStringValuePrefix(Option.builder().longOpt("summary.filter.stringValuePrefix").desc("(int)Use the 'PrefixStringFilter' informations from the summary to filter more reformulations").build()) //
 		, PartitionID(Option.builder().longOpt("partition.id").desc("The key to use as the partition ID in the collection").build()) //
 		;
 
@@ -69,6 +70,7 @@ public final class TheConfiguration
 		, Summary(MyOptions.Summary.opt.getLongOpt()) //
 		, SummaryType(MyOptions.SummaryType.opt.getLongOpt()) //
 		, SummaryFilterTypes(MyOptions.SummaryFilterTypes.opt.getLongOpt()) //
+		, SummaryFilterStringValuePrefix(MyOptions.SummaryFilterStringValuePrefix.opt.getLongOpt()) //
 		, PartitionID(MyOptions.PartitionID.opt.getLongOpt()) //
 		;
 

@@ -68,6 +68,11 @@ public final class Summary
 		if (config.getBoolean(TheConfiguration.OneProperty.SummaryFilterTypes.getPropertyName(), true))
 			filters.add(TreeFilters.Filters.TYPE);
 
+		int stringValuePrefixSize = config.getInt(TheConfiguration.OneProperty.SummaryFilterStringValuePrefix.getPropertyName(), 0);
+
+		if (stringValuePrefixSize != 0)
+			filters.add(TreeFilters.Filters.STRING_VALUE_PREFIX);
+
 		return get(uri, parseType(config.getString("summary.type")), filters);
 	}
 
