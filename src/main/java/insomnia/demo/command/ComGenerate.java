@@ -146,7 +146,7 @@ final class ComGenerate implements ICommand
 		Stream<ITree<Object, KVLabel>> st;
 
 		if (summary.isEmpty())
-			st = Trees.treesFromAutomatonStream(reformulations, 10);
+			st = Trees.treesFromAutomatonStream(reformulations, 20);
 		else
 		{
 			summary.consider(reformulations);
