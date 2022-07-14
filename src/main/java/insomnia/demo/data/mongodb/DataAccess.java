@@ -10,7 +10,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.commons.cli.Option;
@@ -20,6 +28,7 @@ import org.apache.commons.collections4.MultiValuedMap;
 import org.apache.commons.collections4.bag.HashBag;
 import org.apache.commons.collections4.multimap.HashSetValuedHashMap;
 import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;
 import org.bson.BsonArray;
 import org.bson.BsonBoolean;
@@ -71,6 +80,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	private enum MyOptions
 	{
 		QUERY_BATCHSIZE(Option.builder().longOpt("query.batchSize").desc("(int) How many queries to send at once to MongoDB").build()), //
+		BATCHES_NBTHREADS(Option.builder().longOpt("query.batches.nbThreads").desc("(int) Number of thread used to process batches").build()), //
 		DATA_BATCHSIZE(Option.builder().longOpt("data.batchSize").desc("(int) How many records MongoDB must batch").build()), //
 		LEAF_CHECKTERMINAL(Option.builder().longOpt("leaf.checkTerminal").desc("(bool) If true, the native MongoDB query will have constraints to check if a terminal node in the query is a terminal node in the result").build()), //
 		INHIBIT_BATCH_STREAM_TIME(Option.builder().longOpt("inhibitBatchStreamTime").desc("(bool) If true, does it best to not count the time passed in the result stream to construct batches of reformulations").build()), //
@@ -112,6 +122,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private int queryBatchSize, dataBatchSize;
 
+	private int nbThreads;
+
 	private boolean checkTerminalLeaf;
 
 	private boolean inhibitBatchStreamTime;
@@ -132,6 +144,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private static Collection<CPUTimeBenchmark> streamMeasures;
 
+	private Measures measures;
+
 	private DataAccess(URI uri, Configuration config, String db, String collectionName, Measures measures)
 	{
 		if (null == client)
@@ -146,6 +160,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			connection  = new ConnectionString(uri_s);
 			client      = MongoClients.create(connection);
 		}
+		this.measures       = measures;
 		logicalPartition    = LogicalPartition.nullValue();
 		collection          = client.getDatabase(db).getCollection(collectionName);
 		this.collectionName = collectionName;
@@ -158,6 +173,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		partitionID            = config.getString(TheConfiguration.OneProperty.PartitionID.getPropertyName());
 		queryBatchSize         = config.getInt(MyOptions.QUERY_BATCHSIZE.opt.getLongOpt(), 100);
 		dataBatchSize          = config.getInt(MyOptions.DATA_BATCHSIZE.opt.getLongOpt(), 100);
+		nbThreads              = config.getInt(MyOptions.BATCHES_NBTHREADS.opt.getLongOpt(), 1);
 		checkTerminalLeaf      = config.getBoolean(MyOptions.LEAF_CHECKTERMINAL.opt.getLongOpt(), true);
 		inhibitBatchStreamTime = config.getBoolean(MyOptions.INHIBIT_BATCH_STREAM_TIME.opt.getLongOpt(), true);
 		q2NativeDots           = config.getBoolean(MyOptions.Q2NATIVE_DOTS.opt.getLongOpt(), false);
@@ -739,14 +755,59 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	}
 
 	@Override
-	public insomnia.demo.data.IDataAccess.explainStats explainStats(Object record)
+	public explainStats explainStats(Object record)
 	{
+		if (record instanceof explainStats)
+			return (explainStats) record;
+
 		var doc       = ((Document) record);
 		var time      = doc.getEmbedded(List.of("executionStats"), Document.class).getInteger("executionTimeMillis");
 		var nbAnswers = doc.getEmbedded(List.of("executionStats"), Document.class).getInteger("nReturned");
 
 		var benchTime = new CPUTimeBenchmark();
 		benchTime.plus(Duration.ofMillis(time), EnumSet.of(TIME.REAL));
+
+		return new explainStats()
+		{
+			@Override
+			public CPUTimeBenchmark getTime()
+			{
+				return benchTime;
+			}
+
+			@Override
+			public long getNbAnswers()
+			{
+				return nbAnswers;
+			}
+		};
+	}
+
+	private explainStats emptyStats()
+	{
+		var cpu = new CPUTimeBenchmark();
+
+		return new explainStats()
+		{
+			@Override
+			public CPUTimeBenchmark getTime()
+			{
+				return cpu;
+			}
+
+			@Override
+			public long getNbAnswers()
+			{
+				return 0;
+			}
+		};
+	}
+
+	private explainStats addStats(explainStats stats, Object stats_b)
+	{
+		var  b         = explainStats(stats_b);
+		var  benchTime = CPUTimeBenchmark.plus(stats.getTime(), b.getTime());
+		long nbAnswers = stats.getNbAnswers() + b.getNbAnswers();
 
 		return new explainStats()
 		{
@@ -804,11 +865,137 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	@Override
 	public Stream<Object> explain(Stream<ITree<Object, KVLabel>> queries)
 	{
-		nbQueries = new long[] { 0, 0 };
-		queries   = wrapQueries(queries);
-		var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
+		if (nbThreads < 1)
+			throw new IllegalArgumentException(String.format("%s must be positive. Have %d", MyOptions.BATCHES_NBTHREADS.opt.getLongOpt(), nbThreads));
 
-		return batch.flatMap(this::explainBson);
+		queries = wrapQueries(queries);
+
+		if (nbThreads == 0)
+		{
+			nbQueries = new long[] { 0, 0 };
+			var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);
+
+			return batch.flatMap(this::explainBson);
+		}
+		else
+			return explainParallel(queries);
+	}
+
+	private Stream<Object> explainParallel(Stream<ITree<Object, KVLabel>> queries)
+	{
+		try
+		{
+			ITree<Object, KVLabel> emptyQuery = Trees.empty();
+
+			var queriesQueue = new ArrayBlockingQueue<ITree<Object, KVLabel>>(queryBatchSize * nbThreads);
+			var futures      = new ArrayList<Future<Pair<explainStats, Measures>>>(nbThreads);
+			var execService  = Executors.newFixedThreadPool(nbThreads);
+
+			for (int i = 0; i < nbThreads; i++)
+				futures.add(execService.submit(explainCallable(queriesQueue, i, emptyQuery)));
+
+			execService.shutdown();
+			var threadMeas = measures.getTime("threads.time");
+
+			measures.set("threads", "nb", nbThreads);
+
+			threadMeas.startChrono();
+
+			for (var q : HelpStream.toIterable(queries))
+				queriesQueue.put(q);
+
+			queriesQueue.put(emptyQuery);
+
+			while (!execService.isTerminated())
+				execService.awaitTermination(10, TimeUnit.SECONDS);
+
+			threadMeas.stopChrono();
+
+			var stats = new ArrayList<Object>(nbThreads);
+			nbQueries = new long[] { 0, 0 };
+			int i = 0;
+
+			for (var f : futures)
+			{
+				i++;
+				var res       = f.get();
+				var rStats    = res.getKey();
+				var rmeasures = res.getValue();
+
+				rmeasures.setPrefix(String.format("thread.%d.", i));
+				measures.addAll(rmeasures);
+
+				stats.add(rStats);
+				int qtotal  = rmeasures.getInt("queries", "total");
+				int batchNb = rmeasures.getInt("queries", "batch.nb");
+
+				nbQueries[0] += qtotal;
+				nbQueries[1] += batchNb;
+			}
+			return stats.stream();
+		}
+		catch (InterruptedException | ExecutionException e)
+		{
+			throw new Error(e);
+		}
+	}
+
+	public Callable<Pair<explainStats, Measures>> explainCallable(BlockingQueue<ITree<Object, KVLabel>> queries, int i, ITree<?, ?> emptyQuery)
+	{
+		return () -> {
+			var threadMeasures = new Measures();
+			var threadTime     = threadMeasures.getTime("thread", "time");
+
+			var tqueriesList = new ArrayList<ITree<Object, KVLabel>>(queryBatchSize);
+			var queriesList  = new ArrayList<Bson>(queryBatchSize);
+			var count        = 0;
+			var end          = false;
+
+			explainStats totalStats = emptyStats();
+
+			int nbBatches = 0, nbQueries = 0;
+
+			threadTime.startChrono();
+			while (!end)
+			{
+				count += queries.drainTo(tqueriesList, queryBatchSize - tqueriesList.size());
+
+				if (tqueriesList.isEmpty())
+					continue;
+
+				int lasti = tqueriesList.size() - 1;
+				var query = tqueriesList.get(lasti);
+
+				// End of the process
+				if (query == emptyQuery)
+				{
+					queries.put(query);
+					tqueriesList.remove(lasti);
+					end = true;
+					count--;
+				}
+
+				if ((end && count != 0) || count == queryBatchSize)
+				{
+					nbQueries += count;
+					nbBatches++;
+
+					var stats = explainBson(tqueriesList.stream().map(this::tree2Query).collect(Collectors.toList())) //
+						.collect(Collectors.toList()).get(0);
+					totalStats = addStats(totalStats, stats);
+
+					queriesList.clear();
+					tqueriesList.clear();
+					count = 0;
+				}
+			}
+			threadMeasures.set("queries", "total", nbQueries);
+			threadMeasures.set("queries", "batch.nb", nbBatches);
+			threadMeasures.set("answers", "total", (int) totalStats.getNbAnswers());
+			threadMeasures.set(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME.measureName(), totalStats.getTime());
+			threadTime.stopChrono();
+			return Pair.of(totalStats, threadMeasures);
+		};
 	}
 
 	@Override
