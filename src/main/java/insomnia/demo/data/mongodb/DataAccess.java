@@ -870,7 +870,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 		queries = wrapQueries(queries);
 
-		if (nbThreads == 0)
+		if (nbThreads == 1)
 		{
 			nbQueries = new long[] { 0, 0 };
 			var batch = batchIt(queries.map(this::tree2Query), queryBatchSize, nbQueries);

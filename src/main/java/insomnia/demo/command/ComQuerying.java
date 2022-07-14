@@ -479,7 +479,6 @@ final class ComQuerying implements ICommand
 			var stats = dataAccess.explainStats(r);
 			nbAnsw[0] += stats.getNbAnswers();
 			dbTime.plus(stats.getTime());
-			measures.set(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME.measureName() + dataAccess.getNbBatches(), stats.getTime());
 			strmAction.stopChrono();
 			strmNext.startChrono();
 		}, () -> {
