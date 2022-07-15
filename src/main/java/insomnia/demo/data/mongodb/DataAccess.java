@@ -881,18 +881,20 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			return explainParallel(queries);
 	}
 
+	private boolean explainParallel_end;
+
 	private Stream<Object> explainParallel(Stream<ITree<Object, KVLabel>> queries)
 	{
 		try
 		{
-			ITree<Object, KVLabel> emptyQuery = Trees.empty();
+			explainParallel_end = false;
 
 			var queriesQueue = new ArrayBlockingQueue<ITree<Object, KVLabel>>(queryBatchSize * nbThreads);
 			var futures      = new ArrayList<Future<Pair<explainStats, Measures>>>(nbThreads);
 			var execService  = Executors.newFixedThreadPool(nbThreads);
 
 			for (int i = 0; i < nbThreads; i++)
-				futures.add(execService.submit(explainCallable(queriesQueue, i, emptyQuery)));
+				futures.add(execService.submit(explainCallable(queriesQueue, i)));
 
 			execService.shutdown();
 			var threadMeas = measures.getTime("threads.time");
@@ -902,9 +904,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			threadMeas.startChrono();
 
 			for (var q : HelpStream.toIterable(queries))
-				queriesQueue.put(q);
+				queriesQueue.put(Trees.create(q));
 
-			queriesQueue.put(emptyQuery);
+			explainParallel_end = true;
 
 			while (!execService.isTerminated())
 				execService.awaitTermination(10, TimeUnit.SECONDS);
@@ -940,7 +942,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		}
 	}
 
-	public Callable<Pair<explainStats, Measures>> explainCallable(BlockingQueue<ITree<Object, KVLabel>> queries, int i, ITree<?, ?> emptyQuery)
+	public Callable<Pair<explainStats, Measures>> explainCallable(BlockingQueue<ITree<Object, KVLabel>> queries, int i)
 	{
 		return () -> {
 			var threadMeasures = new Measures();
@@ -949,33 +951,20 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			var tqueriesList = new ArrayList<ITree<Object, KVLabel>>(queryBatchSize);
 			var queriesList  = new ArrayList<Bson>(queryBatchSize);
 			var count        = 0;
-			var end          = false;
 
 			explainStats totalStats = emptyStats();
 
 			int nbBatches = 0, nbQueries = 0;
 
 			threadTime.startChrono();
-			while (!end)
+			while (!explainParallel_end || !queries.isEmpty())
 			{
 				count += queries.drainTo(tqueriesList, queryBatchSize - tqueriesList.size());
 
-				if (tqueriesList.isEmpty())
+				if (count == 0)
 					continue;
 
-				int lasti = tqueriesList.size() - 1;
-				var query = tqueriesList.get(lasti);
-
-				// End of the process
-				if (query == emptyQuery)
-				{
-					queries.put(query);
-					tqueriesList.remove(lasti);
-					end = true;
-					count--;
-				}
-
-				if ((end && count != 0) || count == queryBatchSize)
+				if ((explainParallel_end && count != 0) || count == queryBatchSize)
 				{
 					nbQueries += count;
 					nbBatches++;
