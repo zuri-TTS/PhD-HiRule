@@ -213,7 +213,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		this.queryFilter = filter;
 	}
 
-	private void needSummary()
+	private ITreeNavigator<NodeInfos<Object>, KVLabel> createSummaryNavigator()
 	{
 		if (!summaryUrl.isEmpty())
 		{
@@ -228,9 +228,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				var summary = Summary.get(summaryUrl, Summary.parseType(summaryType), EnumSet.noneOf(TreeFilters.Filters.class));
 
 				if (summary instanceof PathSummary<?, ?>)
-					summaryNavigator = TreeTypeNavigators.from((PathSummary<Object, KVLabel>) summary, true);
+					return TreeTypeNavigators.from((PathSummary<Object, KVLabel>) summary, true);
 				else if (summary instanceof LabelSummary<?, ?>)
-					summaryNavigator = TreeTypeNavigators.constant((LabelSummary<Object, KVLabel>) summary, true);
+					return TreeTypeNavigators.constant((LabelSummary<Object, KVLabel>) summary, true);
 				else
 					throw new IllegalArgumentException(String.format("[mongodb] Can't handle the summary: %s", summary));
 			}
@@ -240,13 +240,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			}
 		}
 		else
-			summaryNavigator = TreeTypeNavigators.constant(EnumSet.of(NodeType.MULTIPLE));
+			return TreeTypeNavigators.constant(EnumSet.of(NodeType.MULTIPLE));
 	}
 
 	private ITreeNavigator<NodeInfos<Object>, KVLabel> getSummaryNavigator()
 	{
 		if (null == summaryNavigator)
-			needSummary();
+			summaryNavigator = createSummaryNavigator();
 
 		return summaryNavigator;
 	}
@@ -330,8 +330,13 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private Bson tree2Query(ITree<Object, KVLabel> tree)
 	{
+		return tree2Query(tree, getSummaryNavigator());
+	}
+
+	private Bson tree2Query(ITree<Object, KVLabel> tree, ITreeNavigator<NodeInfos<Object>, KVLabel> summaryNavigator)
+	{
 		q2native.startChrono();
-		BsonDocument filter = tree2Query_(tree);
+		BsonDocument filter = tree2Query_(tree, summaryNavigator);
 		q2native.stopChrono();
 		return filter;
 	}
@@ -341,9 +346,9 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return val == Math.ceil(val);
 	}
 
-	private BsonDocument tree2Query_(ITree<Object, KVLabel> tree)
+	private BsonDocument tree2Query_(ITree<Object, KVLabel> tree, ITreeNavigator<NodeInfos<Object>, KVLabel> summaryNavigator)
 	{
-		getSummaryNavigator().goToRoot();
+		summaryNavigator.goToRoot();
 
 		if (!logicalPartition.getInterval().isNull())
 		{
@@ -351,7 +356,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			tbuilder.addChildDown(0).setLabel(KVLabels.create(partitionID)).setValue(logicalPartition.getInterval()).setTerminal();
 			tree = Trees.create(tbuilder);
 		}
-		return tree2Query(tree, tree.getRoot(), EnumSet.of(NodeType.OBJECT));
+		return tree2Query(tree, tree.getRoot(), summaryNavigator, EnumSet.of(NodeType.OBJECT));
 	}
 
 	private static boolean isExists_op(BsonValue val)
@@ -416,11 +421,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		.append("$not", leafBadType);
 
 	private BsonDocument tree2Query( //
-		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node, EnumSet<NodeType> type)
+		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node, ITreeNavigator<NodeInfos<Object>, KVLabel> summaryNavigator, EnumSet<NodeType> type)
 	{
-		var summaryNavigator = getSummaryNavigator();
-		var childs           = tree.getChildren(node);
-		var nbChilds         = childs.size();
+		var childs   = tree.getChildren(node);
+		var nbChilds = childs.size();
 
 		if (0 == nbChilds)
 			return documentFromNodeValue(node, type);
@@ -444,7 +448,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 				summaryNavigator.setCurrentNode(currentPos);
 				summaryNavigator.followFirstPath(List.of(label));
-				var doc = tree2Query(tree, c.getChild(), summaryNavigator.getCurrentNode().getValue().getNodeTypes());
+				var doc = tree2Query(tree, c.getChild(), summaryNavigator, summaryNavigator.getCurrentNode().getValue().getNodeTypes());
 				{
 					var res = objectMergeChilds(doc, labelPrefix);
 					doc = (null != res) ? res : new BsonDocument(label.asString(), doc);
@@ -952,6 +956,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 			var queriesList  = new ArrayList<Bson>(queryBatchSize);
 			var count        = 0;
 
+			var summaryNavigator = createSummaryNavigator();
+
 			explainStats totalStats = emptyStats();
 
 			int nbBatches = 0, nbQueries = 0;
@@ -969,7 +975,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 					nbQueries += count;
 					nbBatches++;
 
-					var stats = explainBson(tqueriesList.stream().map(this::tree2Query).collect(Collectors.toList())) //
+					var stats = explainBson(tqueriesList.stream().map(t -> tree2Query(t, summaryNavigator)).collect(Collectors.toList())) //
 						.collect(Collectors.toList()).get(0);
 					totalStats = addStats(totalStats, stats);
 
