@@ -23,6 +23,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.collections4.Bag;
 import org.apache.commons.collections4.bag.HashBag;
 import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.lang3.tuple.Pair;
 
 import insomnia.data.ITree;
 import insomnia.demo.Measures;
@@ -355,6 +356,7 @@ final class ComQuerying implements ICommand
 
 	private void explainColls(Configuration config) throws IOException, ParseException, InterruptedException
 	{
+		var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
 		var measures       = TheDemo.measures();
 		var summaries      = config.getList(String.class, "summary");
 		var partitions     = config.getList(String.class, "partition");
@@ -363,7 +365,7 @@ final class ComQuerying implements ICommand
 		var reformulations = ComGenerate.getReformulations(config, measures);
 		int i              = 0;
 
-		var callables = new ArrayList<Callable<Measures>>(nbThreads);
+		var callables = new ArrayList<Callable<Pair<Measures, List<Object>>>>(nbThreads);
 		var pdecoder  = LogicalPartition.decoder();
 
 		for (var dataAccess : dataAccesses)
@@ -406,9 +408,11 @@ final class ComQuerying implements ICommand
 				var resultStream = dataAccess.explain(filteredRefs);
 				create.stopChrono();
 
+				var res = resultStream.collect(Collectors.toList());
+				resultStream = res.stream();
 				explainBatch(config, threadMeasures, dataAccess, resultStream);
 				threadTime.stopChrono();
-				return threadMeasures;
+				return Pair.of(threadMeasures, res);
 			});
 		}
 
@@ -426,9 +430,21 @@ final class ComQuerying implements ICommand
 			var answers_nb = 0;
 			var queries_nb = 0;
 
+			var output = outputFilePrinter("result");
+			i = 1;
+
 			for (var f : futures)
 			{
-				var threadMeasure = f.get();
+				var res           = f.get();
+				var threadMeasure = res.getKey();
+
+				if (displayAnswers)
+				{
+					var result = res.getRight();
+					output.println(String.format("Thread %d", i++));
+					result.forEach(output::println);
+					output.println();
+				}
 				measures.addAll(threadMeasure);
 				answers_nb += threadMeasure.getInt("answers", "total");
 				queries_nb += threadMeasure.getInt("queries", "total");
@@ -472,6 +488,9 @@ final class ComQuerying implements ICommand
 		var strmAction = measures.getTime(TheDemo.TheMeasures.QEVAL_STREAM_ACTION.measureName());
 		int nbAnsw[]   = { 0 };
 		var dbTime     = measures.getTime(TheDemo.TheMeasures.QEVAL_STATS_DB_TIME.measureName());
+		var output     = outputFilePrinter("result");
+
+		var displayAnswers = config.getBoolean(MyOptions.DisplayAnswers.opt.getLongOpt(), false);
 
 		executeBatch(config, measures, dataAccess, resultStream, r -> {
 			strmNext.stopChrono();
@@ -479,6 +498,11 @@ final class ComQuerying implements ICommand
 			var stats = dataAccess.explainStats(r);
 			nbAnsw[0] += stats.getNbAnswers();
 			dbTime.plus(stats.getTime());
+
+			if (displayAnswers)
+			{
+				output.println(r);
+			}
 			strmAction.stopChrono();
 			strmNext.startChrono();
 		}, () -> {

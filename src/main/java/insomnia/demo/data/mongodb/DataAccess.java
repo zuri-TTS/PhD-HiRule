@@ -742,7 +742,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	{
 		var disjunction = Filters.or(queries);
 
-		var stats = collection.find(disjunction).explain(ExplainVerbosity.EXECUTION_STATS);
+		var cursor = collection.find(disjunction);
+		var stats = cursor.explain(ExplainVerbosity.EXECUTION_STATS);
 		return Stream.of(stats);
 	}
 
