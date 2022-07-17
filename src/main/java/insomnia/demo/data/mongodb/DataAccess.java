@@ -743,7 +743,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		var disjunction = Filters.or(queries);
 
 		var cursor = collection.find(disjunction);
-		var stats = cursor.explain(ExplainVerbosity.EXECUTION_STATS);
+		var stats  = cursor.explain(ExplainVerbosity.EXECUTION_STATS);
 		return Stream.of(stats);
 	}
 
@@ -976,9 +976,11 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 					nbQueries += count;
 					nbBatches++;
 
-					var stats = explainBson(tqueriesList.stream().map(t -> tree2Query(t, summaryNavigator)).collect(Collectors.toList())) //
-						.collect(Collectors.toList()).get(0);
-					totalStats = addStats(totalStats, stats);
+					var statsList = explainBson(tqueriesList.stream().map(t -> tree2Query(t, summaryNavigator)).collect(Collectors.toList())) //
+						.collect(Collectors.toList());
+
+					for (var stats : statsList)
+						totalStats = addStats(totalStats, stats);
 
 					queriesList.clear();
 					tqueriesList.clear();
