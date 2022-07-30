@@ -24,6 +24,7 @@ import java.util.stream.Stream;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.collections4.Bag;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MultiValuedMap;
 import org.apache.commons.collections4.bag.HashBag;
 import org.apache.commons.collections4.multimap.HashSetValuedHashMap;
@@ -366,8 +367,16 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 	private static BsonDocument bsonEmptyDocument = new BsonDocument();
 
-	private static BsonDocument combineExpr(String key, BsonDocument a, BsonDocument b)
+	private static BsonValue combineExpr(String key, BsonValue va, BsonValue vb)
 	{
+		if (key.equals("$and"))
+			return new BsonArray(ListUtils.union(va.asArray(), vb.asArray()));
+		if (key.equals("$or"))
+			throw new AssertionError();
+
+		var a = va.asDocument();
+		var b = vb.asDocument();
+
 		if (bsonEmptyDocument.equals(a) || bsonEmptyDocument.equals(b))
 			return bsonEmptyDocument;
 		if (isExists_op(a))
@@ -410,15 +419,21 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return bsonEmptyDocument;
 	}
 
+	// ==========================================================================
+
 	private static BsonDocument doc_exists = new BsonDocument("$exists", BsonBoolean.TRUE);
 
-	private static BsonDocument leafBadType = new BsonDocument("$type", new BsonArray( //
-		List.of(new BsonInt32(BsonType.ARRAY.getValue()), new BsonInt32(BsonType.DOCUMENT.getValue())) //
-	));
+	private static BsonDocument doc_texists = new BsonDocument("$type", //
+		new BsonArray(List.of( //
+			new BsonInt32(BsonType.BOOLEAN.getValue()), //
+			new BsonInt32(BsonType.STRING.getValue()), //
+			new BsonInt32(BsonType.INT32.getValue()), //
+			new BsonInt32(BsonType.INT64.getValue()), //
+			new BsonInt32(BsonType.NULL.getValue()), //
+			new BsonInt32(BsonType.DOUBLE.getValue()) //
+		)));
 
-	private static BsonDocument doc_texists = new BsonDocument() //
-		.append("$exists", BsonBoolean.TRUE) //
-		.append("$not", leafBadType);
+	// ==========================================================================
 
 	private BsonDocument tree2Query( //
 		ITree<Object, KVLabel> tree, INode<Object, KVLabel> node, ITreeNavigator<NodeInfos<Object>, KVLabel> summaryNavigator, EnumSet<NodeType> type)
@@ -441,6 +456,8 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				if (value != null && !KVValues.interpretation().isAny(value))
 					throw new Error(String.format("Intermediary node has a value: %s", value));
 			}
+
+			// Construct a BsonDocument for each child
 			for (var c : childs)
 			{
 				var label       = c.getLabel();
@@ -448,11 +465,10 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 
 				summaryNavigator.setCurrentNode(currentPos);
 				summaryNavigator.followFirstPath(List.of(label));
+
 				var doc = tree2Query(tree, c.getChild(), summaryNavigator, summaryNavigator.getCurrentNode().getValue().getNodeTypes());
-				{
-					var res = objectMergeChilds(doc, labelPrefix);
-					doc = (null != res) ? res : new BsonDocument(label.asString(), doc);
-				}
+				doc = makeTheLabelDocument(label.asString(), labelPrefix, doc);
+
 				if (doc.isDocument())
 					keyBag.addAll(doc.keySet());
 
@@ -505,12 +521,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		if (value == null || KVValues.interpretation().isAny(value))
 		{
 			if (node.isTerminal() && checkTerminalLeaf)
-			{
-				if (NodeType.isMultiple(type))
-					return new BsonDocument("$elemMatch", new BsonDocument("$not", leafBadType));
-				else
-					return doc_texists;
-			}
+				return doc_texists;
 			else
 				return doc_exists;
 		}
@@ -543,35 +554,40 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 		return new BsonDocument("$eq", bsonValue);
 	}
 
-	private static BsonDocument objectMergeChilds(BsonDocument childDoc, String labelPrefix)
+	private final static List<String> conditionsToExplode = List.of("$and", "$or");
+
+	private static BsonDocument makeTheLabelDocument(String label, String labelPrefix, BsonDocument doc)
 	{
-		var res = new BsonDocument();
-		var and = childDoc.get("$and");
-
-		// Get up a $and element
-		if (null != and)
+		for (var elm : conditionsToExplode)
 		{
-			var array = new BsonArray();
+			var docElm = doc.get(elm);
 
-			for (var obj : and.asArray())
+			if (null == docElm)
+				continue;
+
+			var newElements = new ArrayList<BsonDocument>();
+
+			for (var e : docElm.asArray())
 			{
-				var doc = obj.asDocument();
-				var k   = doc.getFirstKey();
-				array.add(new BsonDocument(labelPrefix + k, doc.get(k)));
+				var subQuery = makeTheLabelDocument(label, labelPrefix, e.asDocument());
+				newElements.add(subQuery);
 			}
-			return new BsonDocument("$and", array);
+			return new BsonDocument(elm, new BsonArray(newElements));
 		}
-		else
+
+		var ret = new BsonDocument();
+
+		for (var dentry : doc.entrySet())
 		{
-			for (var k : childDoc.keySet())
-			{
-				if (k.startsWith("$"))
-					return null;
+			var dlabel      = dentry.getKey();
+			var dlabelQuery = dentry.getValue();
 
-				res.append(labelPrefix + k, childDoc.get(k));
-			}
+			if (dlabel.charAt(0) == '$')
+				ret.append(label, new BsonDocument(dlabel, dlabelQuery));
+			else
+				ret.append(labelPrefix + dlabel, dlabelQuery);
 		}
-		return res;
+		return ret;
 	}
 
 	private static BsonDocument makeAnd(List<BsonDocument> docs)
@@ -596,7 +612,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 	{
 		var res = new BsonDocument();
 
-		MultiValuedMap<String, BsonDocument> duplicates = new HashSetValuedHashMap<>();
+		MultiValuedMap<String, BsonValue> duplicates = new HashSetValuedHashMap<>();
 
 		for (var doc : bsonChilds)
 		{
@@ -605,7 +621,7 @@ public final class DataAccess implements IDataAccess<Object, KVLabel>
 				if (keyBag.getCount(k) == 1)
 					res.append(k, simplifyEq(doc.get(k)));
 				else
-					duplicates.put(k, doc.getDocument(k));
+					duplicates.put(k, doc.get(k));
 			}
 		}
 
