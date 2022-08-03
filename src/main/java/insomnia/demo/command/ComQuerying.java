@@ -37,6 +37,7 @@ import insomnia.demo.input.LogicalPartition;
 import insomnia.demo.input.Query;
 import insomnia.demo.input.Summary;
 import insomnia.implem.kv.data.KVLabel;
+import insomnia.implem.summary.LabelSummary;
 import insomnia.implem.summary.PathSummary;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.function.ProcessFunction;
@@ -316,9 +317,26 @@ final class ComQuerying implements ICommand
 			var summary = Summary.get(config, s);
 
 			var measureGroup = "summary:" + s;
+			int nbPrefixes   = 0;
 
 			if (summary instanceof PathSummary<?, ?>)
-				measures.set(measureGroup, "paths.nb", ((PathSummary<Object, KVLabel>) summary).nbPaths());
+			{
+				var psummary = (PathSummary<Object, KVLabel>) summary;
+				measures.set(measureGroup, "paths.nb", psummary.nbPaths());
+
+				for (var leaf : psummary.getTree().getLeaves())
+					nbPrefixes += leaf.getValue().getStringValuePrefixFilter().size();
+			}
+			else
+			{
+				var lsummary = (LabelSummary<Object, KVLabel>) summary;
+
+				for (var label : lsummary.getLabels())
+					nbPrefixes += lsummary.getNodeType(label).getStringValuePrefixFilter().size();
+			}
+
+			if (nbPrefixes > 0)
+				measures.set(measureGroup, "prefixes.nb", nbPrefixes);
 
 			measures.set(measureGroup, "depth", summary.getDepth());
 			measures.set(measureGroup, "labels.nb", summary.nbLabels());
