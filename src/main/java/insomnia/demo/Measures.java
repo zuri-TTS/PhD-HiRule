@@ -45,6 +45,11 @@ public final class Measures
 		return getTime(defaultGroup, measure);
 	}
 
+	public long getLong(String measure)
+	{
+		return getLong(defaultGroup, measure);
+	}
+
 	public int getInt(String measure)
 	{
 		return getInt(defaultGroup, measure);
@@ -58,6 +63,11 @@ public final class Measures
 	public CPUTimeBenchmark getTime(String group, String measure)
 	{
 		return (CPUTimeBenchmark) groups.computeIfAbsent(group, s -> new HashMap<>()).computeIfAbsent(measure, k -> new CPUTimeBenchmark());
+	}
+
+	public long getLong(String group, String measure)
+	{
+		return (Long) groups.computeIfAbsent(group, s -> new HashMap<>()).computeIfAbsent(measure, k -> 0);
 	}
 
 	public int getInt(String group, String measure)
@@ -111,6 +121,11 @@ public final class Measures
 	public void set(String group, String measureName, String set)
 	{
 		set_(group, measureName, set);
+	}
+
+	public void set(String group, String measure, long val)
+	{
+		set_(group, measure, val);
 	}
 
 	public void set(String group, String measure, int val)

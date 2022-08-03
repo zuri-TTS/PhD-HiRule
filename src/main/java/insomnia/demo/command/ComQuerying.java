@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.text.ParseException;
@@ -36,6 +37,7 @@ import insomnia.demo.input.LogicalPartition;
 import insomnia.demo.input.Query;
 import insomnia.demo.input.Summary;
 import insomnia.implem.kv.data.KVLabel;
+import insomnia.implem.summary.PathSummary;
 import insomnia.lib.cpu.CPUTimeBenchmark;
 import insomnia.lib.function.ProcessFunction;
 
@@ -44,7 +46,7 @@ final class ComQuerying implements ICommand
 	private enum MyOptions
 	{
 		OutputPattern(Option.builder().longOpt("output.pattern").desc("Output path for save results in files; %s must be in the pattern to be replaced by a name").build()) //
-		, QueryMode(Option.builder().longOpt("querying.mode").desc("(each|stats|query|explain|explaincolls) Query mode").build()) //
+		, QueryMode(Option.builder().longOpt("querying.mode").desc("(each|stats|summary_stats|query|explain|explaincolls) Query mode").build()) //
 		, QueryFilter(Option.builder().longOpt("querying.filter").desc("(empty|noempty) Filter queries that are only empty xor not").build()) //
 		, DisplayAnswers(Option.builder().longOpt("querying.display.answers").desc("(bool) Display the answers").build()) //
 		, ConfigPrint(Option.builder().longOpt("querying.config.print").desc("(bool) Print the config in a file").build()) //
@@ -102,7 +104,7 @@ final class ComQuerying implements ICommand
 
 	private enum QueryMode
 	{
-		EACH, STATS, QUERY, EXPLAIN, EXPLAINCOLLS;
+		EACH, STATS, SUMMARY_STATS, QUERY, EXPLAIN, EXPLAINCOLLS;
 
 		static QueryMode fromString(String mode)
 		{
@@ -304,6 +306,26 @@ final class ComQuerying implements ICommand
 			ComConfig.print(config, outputFilePrinter("config"), true);
 	}
 
+	public void summaryStats(Configuration config) throws Exception
+	{
+		var measures  = TheDemo.measures();
+		var summaries = config.getList(String.class, "summary");
+
+		for (var s : summaries)
+		{
+			var summary = Summary.get(config, s);
+
+			var measureGroup = "summary:" + s;
+
+			if (summary instanceof PathSummary<?, ?>)
+				measures.set(measureGroup, "paths.nb", ((PathSummary<Object, KVLabel>) summary).nbPaths());
+
+			measures.set(measureGroup, "depth", summary.getDepth());
+			measures.set(measureGroup, "labels.nb", summary.nbLabels());
+			measures.set(measureGroup, "file.size", Files.size(Path.of(s)));
+		}
+	}
+
 	public void execute(Configuration config) throws Exception
 	{
 		var measures = TheDemo.measures();
@@ -317,6 +339,9 @@ final class ComQuerying implements ICommand
 			break;
 		case STATS:
 			stats(config, measures);
+			break;
+		case SUMMARY_STATS:
+			summaryStats(config);
 			break;
 		case QUERY:
 			if (Query.isNative(config))
