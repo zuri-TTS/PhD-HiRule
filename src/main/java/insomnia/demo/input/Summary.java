@@ -17,6 +17,7 @@ import insomnia.implem.kv.KV;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
 import insomnia.implem.summary.DepthSummary;
+import insomnia.implem.summary.DepthSummaryReader;
 import insomnia.implem.summary.LabelSummaryReader;
 import insomnia.implem.summary.PathSummary;
 import insomnia.lib.codec.IDecoder;
@@ -27,7 +28,7 @@ public final class Summary
 {
 	public enum Type
 	{
-		LABEL, PATH;
+		DEPTH, LABEL, PATH;
 	}
 
 	private Summary()
@@ -40,6 +41,9 @@ public final class Summary
 		Type type;
 		switch (stype.toLowerCase())
 		{
+		case "depth":
+			type = Type.DEPTH;
+			break;
 		case "path":
 			type = Type.PATH;
 			break;
@@ -104,6 +108,12 @@ public final class Summary
 			var data = InputData.filters(InputData.getLinesOf(optPath.get()), Filters.NO_BLANK);
 			var s    = (new LabelSummaryReader<Object, KVLabel>().setReadLabel(IDecoder.from(KVLabels::parseIllegal)).read(data.iterator()));
 			s.filterTypes().addAll(filters);
+			return s;
+		}
+		case DEPTH:
+		{
+			var data = InputData.filters(InputData.getLinesOf(optPath.get()), Filters.NO_BLANK);
+			var s    = (new DepthSummaryReader<Object, KVLabel>()).read(data.iterator());
 			return s;
 		}
 		default:

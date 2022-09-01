@@ -17,6 +17,8 @@ import insomnia.demo.data.DataAccesses;
 import insomnia.demo.input.LogicalPartition;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
+import insomnia.implem.summary.DepthSummary;
+import insomnia.implem.summary.DepthSummaryWriter;
 import insomnia.implem.summary.LabelSummary;
 import insomnia.implem.summary.LabelSummaryWriter;
 import insomnia.implem.summary.PathSummary;
@@ -89,6 +91,13 @@ final class ComSummarize implements ICommand
 					.writeTo((PathSummary<Object, KVLabel>) s, w);
 			};
 			break;
+		case "depth":
+			summary = DepthSummary.create();
+			encoder = (s, w) -> {
+				new DepthSummaryWriter<Object, KVLabel>() //
+					.writeTo((DepthSummary<Object, KVLabel>) s, w);
+			};
+			break;
 		default:
 			throw new IllegalArgumentException(String.format("Invalid summary type: %s", type));
 		}
@@ -148,6 +157,8 @@ final class ComSummarize implements ICommand
 				((LabelSummary<Object, KVLabel>) summary).setFilterStringValue(stringValuePrefixSize);
 			else if (summary instanceof PathSummary<?, ?>)
 				((PathSummary<Object, KVLabel>) summary).setFilterStringValue(stringValuePrefixSize);
+			else if (summary instanceof DepthSummary<?, ?>)
+				;
 			else
 				throw new IllegalArgumentException("Can't handle the class " + summary.getClass().toString());
 
