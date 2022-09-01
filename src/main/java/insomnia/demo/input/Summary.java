@@ -16,7 +16,7 @@ import insomnia.implem.data.TreeFilters.NodeInfos;
 import insomnia.implem.kv.KV;
 import insomnia.implem.kv.data.KVLabel;
 import insomnia.implem.kv.data.KVLabels;
-import insomnia.implem.summary.LabelSummary;
+import insomnia.implem.summary.DepthSummary;
 import insomnia.implem.summary.LabelSummaryReader;
 import insomnia.implem.summary.PathSummary;
 import insomnia.lib.codec.IDecoder;
@@ -58,10 +58,12 @@ public final class Summary
 		return get(config, uri);
 	}
 
+	private final static ISummary<Object, KVLabel> defaultSummary = DepthSummary.create(20);
+
 	public static ISummary<Object, KVLabel> get(Configuration config, String uri) throws IOException, ParseException
 	{
 		if (uri.isEmpty())
-			return LabelSummary.create();
+			return defaultSummary;
 
 		var filters = EnumSet.noneOf(TreeFilters.Filters.class);
 
@@ -79,7 +81,7 @@ public final class Summary
 	public static ISummary<Object, KVLabel> get(String uri, Type type, EnumSet<TreeFilters.Filters> filters) throws IOException, ParseException
 	{
 		if (uri.isEmpty())
-			return LabelSummary.create();
+			return defaultSummary;
 
 		var optPath = InputData.getPath(uri);
 
