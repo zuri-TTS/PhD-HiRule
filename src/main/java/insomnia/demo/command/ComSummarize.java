@@ -162,10 +162,15 @@ final class ComSummarize implements ICommand
 			else
 				throw new IllegalArgumentException("Can't handle the class " + summary.getClass().toString());
 
-			var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
+			{
+				var dataAccess = DataAccesses.getDataAccess(config, TheDemo.measures());
 
-			dataAccess.all().map(dataAccess::nativeToTree).forEach(summary::addTree);
+				var measCreationTotal = measures.getTime("summary.creation.total");
 
+				measCreationTotal.startChrono();
+				dataAccess.all().map(dataAccess::nativeToTree).forEach(summary::addTree);
+				measCreationTotal.stopChrono();
+			}
 			if (!summaryPath.isEmpty())
 			{
 				var filePath = Paths.get(summaryPath);
