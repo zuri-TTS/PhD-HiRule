@@ -195,7 +195,7 @@ final class ComGenerate implements ICommand
 				dup.println();
 			}
 			dup.close();
-			measures.set("reformulations", "unique", queryDup.asMap().size());
+			measures.set("queries", "unique", queryDup.asMap().size());
 		}
 		else
 		{
@@ -207,6 +207,6 @@ final class ComGenerate implements ICommand
 		}
 		queries.close();
 		natives.close();
-		measures.set("reformulations", "nb", nb[0]);
+		measures.set("queries", "total", nb[0]);
 	}
 }
